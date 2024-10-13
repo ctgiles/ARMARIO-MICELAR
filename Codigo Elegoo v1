@@ -1,0 +1,439 @@
+#include <LiquidCrystal_I2C.h>  //Librería necesaria para pantalla LCD
+#include <Wire.h>               //Librería necesaria para pantalla LCD I2C
+#include <DHT.h>                //Librería necesaria para sensor de temperatura
+#include "GFButton.h"           //Librería necesaria para evitar rebotes al pulsar los botones
+
+#define SENSOR1 36     //Pin sensor de temperatura y humedad 1 (parte superior armario)
+#define SENSOR2 37     //Pin sensor de temperatura y humedad 2 (parte inferior armario)
+#define DHTTYPE DHT22  //Tipo de sensor
+
+#define PULSADOROK 43  //Pulsador Aceptar
+#define PULSADORH1 44  //Pulsador Humedad ++
+#define PULSADORH2 45  //Pulsador Humedad --
+#define PULSADORT1 46  //Pulsador Temeperatura ++
+#define PULSADORT2 47  //Pulsador Temperatura -- 
+
+#define HUMIDIFICADOR1 23  //Actuador humedad (parte superior armario)
+#define HUMIDIFICADOR2 22  //Actuador humedad (parte inferior armario)
+
+#define VENTILADOR1 7     //Actuador temperatura alta
+#define VENTILADOR2 6     //Actuador temperatura alta
+#define VENTILADOR3 5     //Actuador temperatura alta
+#define VENTILADOR4 4     //Actuador temperatura alta
+
+/*#define CALEFACTOR1 28  //Actuador temperatura baja (parte superior armario)
+#define CALEFACTOR2 29  //Actuador temperatura baja (parte inferior armario)*/
+
+#define VENTILADOR5 28  //Relay control encendido ventiladores
+#define PELTIER1 29     //Relay control peltier modo frio
+#define PELTIER2 30     //Relay control peltier modo calor
+
+#define TiempoEnvio 29000  //////////PARA MODIFICAR EL TIEMPO QUE PASA ENTRE MEDIDAS ENVIADAS A ESP/////////
+
+volatile int Estado = 2;            //variable necesaria para el menu de la pantalla LCD
+long tiempolcd = 0;                 //Para refrescar la pantalla LCD sin usar delays y evitar el parpadeo
+unsigned long UltimoEnvio = 20000;  //Tiempo de envio al ESP
+long tiempoUltimaLectura = 0;       //Para guardar el tiempo de la última lectura y poder hacer lecturas cada 2 segundos sin usar delays
+long tiempoUltimaImpresion = 0;     //Para guardar el tiempo de la última impresion y que la pantalla LCD no parpadee al imprimir demasiado rapido
+
+volatile float Tdeseada = 25.0;  //Temperatura deseada por el usuario
+volatile float Hdeseada = 80.0;  //Humedad deseada por el usuario
+
+volatile float Tactual1;  //Temperatura parte superior del armario
+volatile float Hactual1;  //Humedad parte superior del armario
+
+volatile float Tactual2;  //Temperatura parte inferior del armario
+volatile float Hactual2;  //Humedad parte inferior del armario
+
+volatile float Tactual;  //Temperatura promedio
+volatile float Hactual;  //Humedad promedio
+
+float Tdeseadaremota = 0.0; //Variable para almacenar la T que el usuario introduce en remoto
+float Hdeseadaremota = 0.0; //Variable para almacenar la H que el usuario introduce en remoto
+
+String inputString = "";      //String donde se almacenan los datos que envia ESP de la siguiente manera 1.0_2.0-
+bool stringComplete = false;  //Para detectar cuando se ha recibido la cadena completa y parar de leer
+
+GFButton botonT1(PULSADORT1);
+GFButton botonT2(PULSADORT2);
+GFButton botonH1(PULSADORH1);
+GFButton botonH2(PULSADORH2);
+GFButton botonOK(PULSADOROK);
+
+DHT dht1(SENSOR1, DHTTYPE);
+DHT dht2(SENSOR2, DHTTYPE);
+
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+
+void setup() {
+  Serial.begin(115200);
+  Serial1.begin(115200);
+  Serial.println("Iniciando sistema...");
+
+  dht1.begin();
+  dht2.begin();
+  lcd.init();
+
+  pinMode(PULSADORT1, INPUT);
+  pinMode(PULSADORT2, INPUT);
+  pinMode(PULSADORH1, INPUT);
+  pinMode(PULSADORH2, INPUT);
+  pinMode(PULSADOROK, INPUT);
+
+  botonT1.setPressHandler(botonT1_pulsado);
+  botonT2.setPressHandler(botonT2_pulsado);
+  botonH1.setPressHandler(botonH1_pulsado);
+  botonH2.setPressHandler(botonH2_pulsado);
+  botonOK.setPressHandler(botonOK_pulsado);
+
+  /*pinMode(CALEFACTOR1, OUTPUT);
+  pinMode(CALEFACTOR2, OUTPUT);*/
+
+  pinMode(VENTILADOR5, OUTPUT);
+  pinMode(PELTIER1, OUTPUT);
+  pinMode(PELTIER2, OUTPUT);
+
+  pinMode(HUMIDIFICADOR1, OUTPUT);
+  pinMode(HUMIDIFICADOR2, OUTPUT);
+
+  pinMode(VENTILADOR1, OUTPUT);
+  pinMode(VENTILADOR2, OUTPUT);
+  pinMode(VENTILADOR3, OUTPUT);
+  pinMode(VENTILADOR4, OUTPUT);
+}
+
+
+void LecturaSensor() {
+  //---------Lectura del Sensor--------------------------
+  if (millis() - tiempoUltimaLectura > 2000) {
+    Tactual1 = dht1.readTemperature();  //Leemos la temperatura en grados Celsius 1
+    Hactual1 = dht1.readHumidity();     //Leemos la Humedad 1
+
+    Tactual2 = dht2.readTemperature();  //Leemos la temperatura en grados Celsius 2
+    Hactual2 = dht2.readHumidity();     //Leemos la Humedad 2
+
+    Tactual = (Tactual1 + Tactual2) / 2;  //Temperatura promedio
+    Hactual = (Hactual1 + Hactual2) / 2;  //Humedad promedio
+
+    tiempoUltimaLectura = millis();  //actualizamos el tiempo de la última lectura
+  }
+}
+
+
+void PantallaLCD() {
+  //Si el sensor no es detectado salta un error
+  if (millis() - tiempoUltimaImpresion > 100) {
+    if ((isnan(Tactual1) || isnan(Hactual1)) && (isnan(Tactual2) || isnan(Hactual2))) {
+      //Impresión monitor serie
+      Serial.println("No se puede leer ningun sensor");
+      //Impresión en pantalla LCD
+      lcd.clear();
+      lcd.print("SENSORES");
+      lcd.setCursor(0, 1);
+      lcd.print("NO CONECTADOS");
+      Serial1.print("Sensores no conectados-"); //Envío a ESP para informar al usuario en la web
+    } 
+    else if (isnan(Tactual1) || isnan(Hactual1)) {
+      //Impresión monitor saerie
+      Serial.println("No se puede leer el sensor DHT1");
+      //Impresión en pantalla LCD
+      lcd.clear();
+      lcd.print("SENSOR DHT1");
+      lcd.setCursor(0, 1);
+      lcd.print("NO CONECTADO");
+      Serial1.print("Sensor DHT1 no conectado-"); //Envío a ESP para informar al usuario en la web
+    } 
+    else if (isnan(Tactual2) || isnan(Hactual2)) {
+      //Impresión monitor serie
+      Serial.println("No se puede leer el sensor DHT2");
+      //Impresión en pantalla LCD
+      lcd.clear();
+      lcd.print("SENSOR DHT2");
+      lcd.setCursor(0, 1);
+      lcd.print("NO CONECTADO");
+      Serial1.print("Sensor DHT2 no conectado-"); //Envío a ESP para informar al usuario en la web
+    }
+
+    else {
+      switch (Estado) {
+        case 0:
+          //Impresion pantalla LCD
+          lcd.backlight();
+          lcd.setCursor(0, 0);
+          lcd.print("BIENVENIDO");
+          lcd.setCursor(0, 2);
+          lcd.print("PULSA UN BOTON");
+          lcd.setCursor(0, 3);
+          lcd.print("PARA CONTINUAR");
+          break;
+
+        case 1:
+          //Impresion pantalla LCD
+          lcd.backlight();
+          lcd.setCursor(0, 0);
+          lcd.print("ELIGE PARAMETROS");
+          lcd.setCursor(0, 1);
+          lcd.print("T:");
+          lcd.print(Tdeseada);
+          lcd.print("  H:");
+          lcd.print(Hdeseada);
+          lcd.setCursor(0, 2);
+          lcd.print("PULSA EL BOTON OK");
+          lcd.setCursor(0, 3);
+          lcd.print("PARA CONTINUAR");
+          break;
+
+        case 2:
+          if (millis() - tiempolcd < 20000) {
+            //Impresion pantalla LCD
+            lcd.backlight();
+            lcd.setCursor(0, 0);
+            lcd.print("DATOS ACTUALES   ");
+            lcd.setCursor(0, 1);
+            lcd.print("T:");
+            lcd.print(Tactual);
+            lcd.print(" H:");
+            lcd.print(Hactual);
+            lcd.setCursor(0, 2);
+            lcd.print("OBJETIVO");
+            lcd.setCursor(0, 3);
+            lcd.print("T:");
+            lcd.print(Tdeseada);
+            lcd.print(" H:");
+            lcd.print(Hdeseada);
+          } else {
+            // Impresion pantalla LCD
+            lcd.backlight();
+            lcd.setCursor(0, 0);
+            lcd.print("DATOS SENSOR 1   ");
+            lcd.setCursor(0, 1);
+            lcd.print("T:");
+            lcd.print(Tactual1);
+            lcd.print(" H:");
+            lcd.print(Hactual1);
+            lcd.setCursor(0, 2);
+            lcd.print("DATOS SENSOR 2   ");
+            lcd.setCursor(0, 3);
+            lcd.print("T:");
+            lcd.print(Tactual2);
+            lcd.print(" H:");
+            lcd.print(Hactual2);
+            if (millis() - tiempolcd > 30000) {
+              tiempolcd = millis();
+              lcd.clear();
+            }
+          }
+          break;
+      }
+    }
+    tiempoUltimaImpresion = millis();
+  }
+}
+
+void ActuadorHumedad() {
+  if ((Hactual1 < (Hdeseada - 5)) || (Hactual < (Hdeseada - 3)))
+    digitalWrite(HUMIDIFICADOR1, HIGH);
+  else if ((Hactual1 > (Hdeseada + 5)) && (Hactual > (Hdeseada + 2)))
+    digitalWrite(HUMIDIFICADOR1, LOW);
+
+  if ((Hactual2 < (Hdeseada - 5)) || (Hactual < (Hdeseada - 3)))
+    digitalWrite(HUMIDIFICADOR2, HIGH);
+  else if ((Hactual2 > (Hdeseada + 5)) && (Hactual > (Hdeseada + 2)))
+    digitalWrite(HUMIDIFICADOR2, LOW);
+}
+
+void ActuadorTemperatura(){
+  //MODO FRIO - CALEFACTOR
+  if(Tactual<(Tdeseada-3)){  //cambiar rango si es demasiado fuerte
+    digitalWrite(VENTILADOR5, HIGH); //modo frio o calor, ventiladores activados
+    digitalWrite(PELTIER2, LOW);  //aseguramos apagado control modo calor
+    digitalWrite(PELTIER1, HIGH); //encendemos control modo frio
+  }
+  //MODO CALOR - AIRE ACONDICIONADO
+  else if(Tactual>(Tdeseada+3)){
+    digitalWrite(VENTILADOR5, HIGH);
+    digitalWrite(PELTIER1, LOW);
+    digitalWrite(PELTIER2, HIGH);
+  }
+  //MODO OFF
+  else{
+    digitalWrite(VENTILADOR5, LOW);
+    digitalWrite(PELTIER1, LOW);
+    digitalWrite(PELTIER2, LOW);
+  }
+}
+
+void Ventilacion() {
+  if (Tactual > (Tdeseada + 1)){
+    analogWrite(VENTILADOR1,255);
+    analogWrite(VENTILADOR2,255);
+    analogWrite(VENTILADOR3,255);
+    analogWrite(VENTILADOR4,255);
+}
+  else if(Tactual < (Tdeseada - 1)){
+    analogWrite(VENTILADOR1,0);
+    analogWrite(VENTILADOR2,0);
+    analogWrite(VENTILADOR3,0);
+    analogWrite(VENTILADOR4,0);
+  }
+}
+
+/*void ActuadorTemperaturaBaja() {
+  if (Tactual < (Tdeseada - 1)) {
+    digitalWrite(CALEFACTOR1, HIGH);
+    digitalWrite(CALEFACTOR2, HIGH);
+  } else if (Tactual > Tdeseada) {
+    digitalWrite(CALEFACTOR1, LOW);
+    digitalWrite(CALEFACTOR2, LOW);
+  }
+}*/
+
+//BOTÓN TEMPERATURA++
+void botonT1_pulsado(GFButton& btn) {
+  Serial.print("PULSADOT1++\n");
+  Serial1.print("Botón pulsado-"); //Envío a ESP para informar al usuario en la web
+  if (Estado == 0) {
+    lcd.clear();
+    Estado = 1;   //En estado 0, si pulsas cualquier botón pasas a estado 1
+  } else if (Estado == 1)
+    Tdeseada += 0.5;
+}
+
+//BOTÓN TEMPERATURA--
+void botonT2_pulsado(GFButton& btn) {
+  Serial.print("PULSADOT2--\n");
+  Serial1.print("Botón pulsado-"); //Envío a ESP para informar al usuario en la web
+  if (Estado == 0) {
+    lcd.clear();
+    Estado = 1;
+  } else if (Estado == 1)
+    Tdeseada -= 0.5;
+}
+
+//BOTÓN HUMEDAD++
+void botonH1_pulsado(GFButton& btn) {
+  Serial.print("PULSADOH3++\n");
+  Serial1.print("Botón pulsado-"); //Envío a ESP para informar al usuario en la web
+  if (Estado == 0) {
+    lcd.clear();
+    Estado = 1;
+  } else if (Estado == 1)
+    Hdeseada += 1;
+}
+
+//BOTÓN HUMEDAD--
+void botonH2_pulsado(GFButton& btn) {
+  Serial.print("PULSADOH4--\n");
+  Serial1.print("Botón pulsado-"); //Envío a ESP para informar al usuario en la web
+  if (Estado == 0) {
+    lcd.clear();
+    Estado = 1;
+  } else if (Estado == 1)
+    Hdeseada -= 1;
+}
+
+//BOTÓN ACEPTAR
+void botonOK_pulsado(GFButton& btn) {
+  Serial.print("PULSADOOK\n");
+  Serial1.print("Botón pulsado-"); //Envío a ESP para informar al usuario en la web
+  if (Estado == 0) {
+    lcd.clear();
+    Estado = 1;
+  } else if (Estado == 1) {
+    lcd.clear();
+    Estado = 2;
+  } else if (Estado == 2) {
+    lcd.clear();
+    Estado = 1;
+  }
+}
+
+
+void EnvioESP() {
+  if (millis() - UltimoEnvio > TiempoEnvio) {
+    Serial.print(Tactual);
+    Serial.print("_");
+    Serial.print(Hactual);
+    Serial.print("_");
+    Serial.print(Tactual1);
+    Serial.print("_");
+    Serial.print(Hactual1);
+    Serial.print("_");
+    Serial.print(Tactual2);
+    Serial.print("_");
+    Serial.print(Hactual2);
+    Serial.print("_");
+    Serial.print(Tdeseada);
+    Serial.print("_");
+    Serial.print(Hdeseada);
+    Serial.print("-\n");
+
+    Serial1.print(Tactual);
+    Serial1.print("_");
+    Serial1.print(Hactual);
+    Serial1.print("_");
+    Serial1.print(Tactual1);
+    Serial1.print("_");
+    Serial1.print(Hactual1);
+    Serial1.print("_");
+    Serial1.print(Tactual2);
+    Serial1.print("_");
+    Serial1.print(Hactual2);
+    Serial1.print("_");
+    Serial1.print(Tdeseada);
+    Serial1.print("_");
+    Serial1.print(Hdeseada);
+    Serial1.print("-");
+
+    UltimoEnvio = millis();
+  }
+}
+
+void LecturaESP() {
+  serialEvent();
+  if(stringComplete) {
+
+    Serial.print("Datos recibidos del ESP:");
+    Serial.println(inputString);
+
+    int pos1 = inputString.indexOf('_');
+    Tdeseadaremota = inputString.substring(0, pos1).toFloat();
+      Tdeseada = Tdeseadaremota;
+    Serial.print("Tdeseada:");
+    Serial.println(Tdeseada);
+
+    Hdeseadaremota = inputString.substring(pos1 + 1, (inputString.length() - 1)).toFloat();
+      Hdeseada = Hdeseadaremota;
+    Serial.print("Hdeseada:");
+    Serial.println(Hdeseada);
+
+    inputString = "";
+    stringComplete = false;
+  }
+}
+
+void serialEvent() {
+  while (Serial1.available()) {
+    char inChar = (char)Serial1.read();
+    inputString += inChar;
+    if (inChar == '-') {
+      stringComplete = true;
+    }
+  }
+}
+
+
+void loop() {
+  LecturaSensor();
+  PantallaLCD();
+  EnvioESP();
+  LecturaESP();
+  botonT1.process();
+  botonT2.process();
+  botonH1.process();
+  botonH2.process();
+  botonOK.process();
+  ActuadorHumedad();
+  ActuadorTemperatura();
+  Ventilacion();
+}
