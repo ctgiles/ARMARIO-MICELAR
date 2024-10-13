@@ -1,0 +1,87 @@
+//Biblioteca necesaria para Tarjeta SD
+#include <SD.h>
+
+//Variable tipo File
+File myFile;
+
+//Variables para que funcione el programa de ejemplo
+float Tactual1=10;
+float Hactual1=80;
+float Tactual2=15;
+float Hactual2=83;
+float Tactual=(Tactual1+Tactual2)/2;
+float Hactual=(Hactual1+Hactual2)/2;
+unsigned long ultimoEnvio = 0;
+unsigned long intervaloEnvio=20000;
+
+//Puertos Necesarios
+#define CS 2   //X defecto es 4, pero necesitamos que sea el 2
+#define MISO 50   //MasterIn-SlaveOut - envío datos de SD a Arduino
+#define MOSI 51   //MasterOut-SlaveIn - envío datos de Arduino a SD
+#define SCK 52    //Serial Clock
+
+//Configuración
+void setup(){
+  //Inicialización
+  Serial.begin(115200);
+  Serial.print("Iniciando SD CTG");
+  if (!SD.begin(CS)) {  //Comprueba que esté conectado el CSPIN
+    Serial.println("No se pudo inicializar la tarjeta SD");
+    return;
+  } 
+  else {
+    Serial.println("Inicializacion exitosa CTG");
+  }
+}
+
+void EnvioTarjetaSD(){
+  //DATOS SENSORES
+  myFile = SD.open("SensoresYActuadores/archivo.txt", FILE_WRITE); //Abrir archivo de toma de datos en modo escritura
+  if (myFile) {
+    Serial.println("Escribiendo datos sensores en SD");  //Mientras haya espacio en la tarjeta SD
+     if((millis()- ultimoEnvio)>intervaloEnvio){
+        myFile.print("Tiempo [ms]: ");
+        myFile.println(millis());
+        myFile.print("Datos sensor arriba:  TEMPERATURA - ");
+        myFile.print(Tactual1);
+        myFile.print("ºC   HUMEDAD - ");
+        myFile.print(Hactual1);
+        myFile.println("%");
+        myFile.print("Datos sensor abajo:  TEMPERATURA - ");
+        myFile.print(Tactual2);
+        myFile.print("ºC   HUMEDAD - ");
+        myFile.print(Hactual2);
+        myFile.println("%");
+        myFile.print("Datos armario:  TEMPERATURA - ");
+        myFile.print(Tactual);
+        myFile.print("ºC   HUMEDAD - ");
+        myFile.print(Hactual);
+        myFile.println("%");
+        ultimoEnvio=millis();
+     }
+     myFile.close();
+    }
+    else{
+      Serial.println("Error al escribir datos de los sensores en la tarjeta SD");
+    }   
+}
+
+void LecturaTarjetaSD(){
+  myFile= SD.open("SensoresYActuadores/archivo.txt"); //Si no especificamos, lee por defecto
+  if(myFile){
+     Serial.println("archivo.txt:");
+     while (myFile.available()) {
+    	Serial.write(myFile.read());
+    }
+    myFile.close(); //cerramos el archivo
+  }
+  else {
+    Serial.println("Error al leer el archivo");
+  }
+}
+
+void loop(){
+  //EnvioTarjetaSD();
+  LecturaTarjetaSD();
+}
+
