@@ -1,0 +1,67 @@
+//Variables para que funcione el programa de ejemplo
+float Tactual;
+float Tdeseada=22;
+unsigned long dutyCycle = 9000;
+
+//Pines necesarios
+#define VENTILADOR5 28  //Relay control encendido ventiladores
+#define PELTIER1 29     //Relay control peltier modo frio
+#define PELTIER2 30     //Relay control peltier modo calor
+
+//Configuracion de los pines
+void setup(){
+  Serial.begin(115200);
+  pinMode(VENTILADOR5, OUTPUT);
+  pinMode(PELTIER1, OUTPUT);
+  pinMode(PELTIER2,OUTPUT);
+}
+
+//Funcion para simular los modos de temperatura
+void CambioValores(){
+  if((millis()%dutyCycle>0) && (millis()%dutyCycle<3000)){
+    Tactual=45;
+    Serial.print("Tactual = ");
+    Serial.println(Tactual);
+  }
+  else if((millis()%dutyCycle>3000) && (millis()%dutyCycle<6000)){
+    Tactual=-10;
+    Serial.print("Tactual = ");
+    Serial.println(Tactual);
+  }
+  else if((millis()%dutyCycle>6000) && (millis()%dutyCycle<9000)){
+    Tactual=20;
+    Serial.print("Tactual = ");
+    Serial.println(Tactual);
+  }
+}
+
+//FUNCIÓN CONTROL MÓDULO PELTIER
+void ActuadorTemperatura(){
+  //MODO FRIO - CALEFACTOR
+  if(Tactual<(Tdeseada-3)){          //cambiar rango si es demasiado fuerte
+    //digitalWrite(VENTILADOR5, HIGH); //modo frio o calor, ventiladores activados
+    digitalWrite(PELTIER2, LOW);     //aseguramos apagado control modo calor
+    digitalWrite(PELTIER1, HIGH);    //encendemos control modo frio
+    Serial.println("Modo calefactor");
+  }
+  //MODO CALOR - AIRE ACONDICIONADO
+  else if(Tactual>(Tdeseada+3)){
+    //digitalWrite(VENTILADOR5, HIGH);
+    digitalWrite(PELTIER1, LOW);
+    digitalWrite(PELTIER2, HIGH);
+    Serial.println("Modo aire acondicionado");
+  }
+  //MODO OFF
+  else{
+    //digitalWrite(VENTILADOR5, LOW);
+    digitalWrite(PELTIER1, LOW);
+    digitalWrite(PELTIER2, LOW);
+    Serial.println("Modo OFF");
+  }
+}
+
+void loop(){
+  CambioValores();
+  ActuadorTemperatura();
+}
+
