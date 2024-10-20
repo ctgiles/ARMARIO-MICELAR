@@ -38,17 +38,18 @@ void CambioValores(){
 //FUNCIÓN CONTROL MÓDULO PELTIER
 void ActuadorTemperatura(){
   //MODO FRIO - CALEFACTOR
-  if(Tactual<(Tdeseada-3)){          //cambiar rango si es demasiado fuerte
-    //digitalWrite(VENTILADOR5, HIGH); //modo frio o calor, ventiladores activados
+  if(Tactual<(Tdeseada-5)){          //cambiar rango si es demasiado fuerte
     digitalWrite(PELTIER2, LOW);     //aseguramos apagado control modo calor
     digitalWrite(PELTIER1, HIGH);    //encendemos control modo frio
+    digitalWrite(VENTILADOR5, HIGH); //modo frio o calor, ventiladores activados
     Serial.println("Modo calefactor");
   }
   //MODO CALOR - AIRE ACONDICIONADO
-  else if(Tactual>(Tdeseada+3)){
+  else if(Tactual>(Tdeseada+5)){
     //digitalWrite(VENTILADOR5, HIGH);
     digitalWrite(PELTIER1, LOW);
     digitalWrite(PELTIER2, HIGH);
+    digitalWrite(VENTILADOR5, HIGH);
     Serial.println("Modo aire acondicionado");
   }
   //MODO OFF
@@ -56,6 +57,7 @@ void ActuadorTemperatura(){
     //digitalWrite(VENTILADOR5, LOW);
     digitalWrite(PELTIER1, LOW);
     digitalWrite(PELTIER2, LOW);
+    digitalWrite(VENTILADOR5, LOW);
     Serial.println("Modo OFF");
   }
 }
@@ -64,4 +66,3 @@ void loop(){
   CambioValores();
   ActuadorTemperatura();
 }
-
