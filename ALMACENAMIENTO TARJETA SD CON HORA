@@ -1,0 +1,116 @@
+//Biblioteca necesaria para Tarjeta SD
+#include <SD.h>
+
+//Bibliotecas necesarias para Módulo RTC
+#include <RTClib.h>
+
+//Variable tipo File
+File myFile;
+RTC_DS1307 rtc;
+DateTime now;
+
+//Variables para que funcione el programa de ejemplo
+float Tactual1=10;
+float Hactual1=80;
+float Tactual2=15;
+float Hactual2=83;
+float Tactual=(Tactual1+Tactual2)/2;
+float Hactual=(Hactual1+Hactual2)/2;
+unsigned long ultimoEnvio = 0;
+unsigned long intervaloEnvio=10000;
+
+//Puertos Necesarios
+#define CS 2   //X defecto es 4, pero necesitamos que sea el 2
+//Otros puertos que se usan - no hay que programarlos
+//MISO 50   //MasterIn-SlaveOut - envío datos de SD a Arduino
+//MOSI 51   //MasterOut-SlaveIn - envío datos de Arduino a SD
+//SCK 52    //Serial Clock - sincronización 
+
+//INICIALIZACIÓN CONEXIÓN TARJETA SD
+void setup(){
+  //Inicialización
+  Serial.begin(115200);
+
+  //INICIALIZACIÓN TARJETA SD
+  Serial.println("Iniciando SD CTG");
+  if (!SD.begin(CS)) {  //Comprueba que esté conectado el CSPIN
+    Serial.println("No se pudo inicializar la tarjeta SD");
+    return;
+  }
+  else
+    Serial.println("Inicializacion exitosa CTG");
+
+  //INICIALIZACIÓN MÓDULO RTC
+  if (!rtc.begin()) {
+    Serial.println("No se puede encontrar RTC");
+    while (1);
+  }
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Ajusta el RTC con la hora de compilación
+  now = rtc.now();
+  Serial.print("Fecha inicialización - ");
+  Serial.print(now.day(),DEC);
+  Serial.print('/');
+  Serial.print(now.month(),DEC);
+  Serial.print('/');
+  Serial.print(now.year(),DEC);
+  Serial.print(" - ");
+  Serial.print(now.hour(),DEC);
+  Serial.print(':');
+  if(now.minute()<10) Serial.print('0');
+  Serial.print(now.minute(),DEC);
+  Serial.print(':');
+  if(now.second()<10) Serial.print('0');
+  Serial.println(now.second(),DEC);
+}
+
+void EnvioTarjetaSD(){
+  if((millis()- ultimoEnvio)>intervaloEnvio){
+    now = rtc.now();
+    myFile = SD.open("archivo.txt", FILE_WRITE); //Abrir archivo de toma de datos en modo escritura
+    if (myFile) {
+
+      Serial.println("Escribiendo datos sensores en SD");  //Mientras haya espacio en la tarjeta SD
+
+      myFile.print(now.day(),DEC);
+      myFile.print('/');
+      myFile.print(now.month(),DEC);
+      myFile.print('/');
+      myFile.print(now.year(),DEC);
+      myFile.print(" - ");
+      myFile.print(now.hour(),DEC);
+      myFile.print(':');
+      if(now.minute()<10) myFile.print('0');
+      myFile.print(now.minute(),DEC);
+      myFile.print(':');
+      if(now.second()<10) myFile.print('0');
+      myFile.println(now.second(),DEC);
+
+      myFile.print("Datos sensor arriba:  TEMPERATURA - ");
+      myFile.print(Tactual1);
+      myFile.print("ºC   HUMEDAD - ");
+      myFile.print(Hactual1);
+      myFile.println("%");
+      myFile.print("Datos sensor abajo:  TEMPERATURA - ");
+      myFile.print(Tactual2);
+      myFile.print("ºC   HUMEDAD - ");
+      myFile.print(Hactual2);
+      myFile.println("%");
+      myFile.print("Datos armario:  TEMPERATURA - ");
+      myFile.print(Tactual);
+      myFile.print("ºC   HUMEDAD - ");
+      myFile.print(Hactual);
+      myFile.println("%");
+      myFile.println();
+
+      ultimoEnvio=millis();
+      myFile.close();
+    }
+    else{
+      Serial.println("Error al escribir datos de los sensores en la tarjeta SD");
+    }   
+  }
+}
+
+void loop(){
+  EnvioTarjetaSD();
+}
