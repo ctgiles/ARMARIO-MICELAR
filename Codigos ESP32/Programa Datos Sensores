@@ -1,0 +1,195 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+#define TiempoEnvio 60000  //////////PARA MODIFICAR EL TIEMPO QUE PASA ENTRE MEDIDAS ENVIADAS A THINGSPEAK/////////
+
+// Configuración de red Wi-Fi
+const char* RedWifi = "BLab";     // Nombre de tu red Wi-Fi
+const char* Password = "Biolab123!";  // Contraseña de tu red Wi-Fi
+
+// Configuración MQTT
+const char* mqttServer = "mqtt3.thingspeak.com"; //Servidor ThingSpeak para enviar temperaturas y humedades
+const char* mqttServer2 = "test.mosquitto.org"; //Servidor mosquitto para enviar información
+const int mqttPort = 1883;
+const char* mqttClientID = "FRgsCxklPSk2OCUXHywBIQg";   //Estos 3 valores te los da thingSpeak al crear un dispositivo mqtt
+const char* mqttUsername = "FRgsCxklPSk2OCUXHywBIQg";   // Tu nombre de usuario MQTT en ThingSpeak (al crear dispositivo mqtt en thingSpeak)
+const char* mqttPassword = "zPFv6lC/Xm1eSTvIY4VT8O1a";  // Tu contraseña MQTT en ThingSpeak (al crear dispositivo mqtt en thingSpeak)
+const char* mqttTopic = "channels/2139985/publish";     //Numero de canal ThingSpeak
+
+volatile float Tdeseada = 0;  //Temperatura deseada por el usuario
+volatile float Hdeseada = 0;  //Humedad deseada por el usuario
+
+volatile float Tactual = 0;  //Temperatura promedio
+volatile float Hactual = 0;  //Humedad promedio
+
+volatile float Tactual1;  //Temperatura parte superior del armario
+volatile float Hactual1;  //Humedad parte superior del armario
+
+volatile float Tactual2;  //Temperatura parte inferior del armario
+volatile float Hactual2;  //Humedad parte inferior del armario
+
+float Tdeseadaremota = 0.0; //Variable para almacenar la T que el usuario introduce en remoto
+float Hdeseadaremota = 0.0; //Variable para almacenar la H que el usuario introduce en remoto
+
+String inputString = "";      //String donde se almacenan los datos que envia el arduino de la siguiente manera 1.0_2.0_3.0_4.0_5.0_6.0_7.0_8.0-
+bool stringComplete = false;  //Para detectar cuando se ha recibido la cadena completa y parar de leer
+
+unsigned long UltimoEnvio = -50000;
+#define MSG_BUFFER_SIZE (200)
+char msg[MSG_BUFFER_SIZE];
+char msg2[MSG_BUFFER_SIZE];
+
+//Servidor thinkspeak
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
+//Servidor mosquitto
+WiFiClient espClient;
+PubSubClient cliente(espClient);
+
+void setup() {
+  Serial.begin(115200);
+
+  // Conexión a Wi-Fi
+  WiFi.begin(RedWifi, Password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+  }
+
+  // Conexión a MQTT
+  client.setServer(mqttServer, mqttPort);
+
+  cliente.setServer(mqttServer2, mqttPort);
+  cliente.setCallback(callback2);
+
+  while (!cliente.connected()) {
+    if (cliente.connect("ESP32CAM_Client")) {
+      cliente.publish("Acciones", "Conectado MQTT servidor mosquitto"); //Publicación en servidor mosquitto para mostrarlo por la web
+      // Suscribirse a los tópicos para recibir mensajes
+      cliente.subscribe("Tdeseada");
+      cliente.subscribe("Hdeseada");
+      cliente.publish("Acciones", "Subscrito a Tdeseada y Hdeseada servidor mosquitto"); //Publicación en servidor mosquitto para mostrarlo por la web
+    } else {
+      cliente.publish("Acciones", "MQTT servidor mosquitto conexion fallida. Reintentando...");
+      delay(10000);
+    }
+  }
+
+  while (!client.connected()) {
+    if (client.connect(mqttClientID, mqttUsername, mqttPassword)) {
+      cliente.publish("Acciones", "Conectado MQTT servidor thinkspeak"); //Publicación en servidor mosquitto para mostrarlo por la web
+    } else {
+      cliente.publish("Acciones", "MQTT servidor thinkspeak conexion fallida. Reintentando...");
+      delay(10000);
+    }
+  }
+}
+
+void loop() {
+
+  Valoresnecesarios();
+  if (millis() - UltimoEnvio > TiempoEnvio) {
+    snprintf(msg, MSG_BUFFER_SIZE, "field1=%.2f&field2=%.2f&field3=%.2f&field4=%.2f&field5=%.2f&field6=%.2f&field7=%.2f&field8=%.2f&status=MQTTPUBLISH", Tactual, Hactual, Tactual1, Hactual1, Tactual2, Hactual2, Tdeseada, Hdeseada);
+
+    // Enviar el dato a ThingSpeak
+    if (client.publish(mqttTopic, msg)) {
+      cliente.publish("Acciones", "Datos publicados en thinkspeak:"); //Publicación en servidor mosquitto para mostrarlo por la web
+      cliente.publish("Acciones", msg);
+    } else {
+      cliente.publish("Acciones", "Error al publicar los datos en thinkspeak"); //Publicación en servidor mosquitto para mostrarlo por la web
+    }
+    UltimoEnvio = millis();
+  }
+  client.loop();
+  cliente.loop();
+}
+
+//FUNCION para separar la cadena de caracteres que recibe del arduino de la siguiente manera 1.0_2.0_3.0_4.0_5.0_6.0_7.0_8.0- y almacenar los valores numericos en 8 variables
+void Valoresnecesarios() {
+  serialEvent();
+  delay(1);
+  if (stringComplete) {
+
+    if (inputString == "Sensor DHT1 no conectado-") {
+      cliente.publish("Acciones", "Sensor DHT1 no conectado"); //Publicación en servidor mosquitto para mostrarlo por la web
+      inputString = "";
+      stringComplete = false;
+    }
+
+    else if (inputString == "Sensor DHT2 no conectado-") {
+      cliente.publish("Acciones", "Sensor DHT2 no conectado"); //Publicación en servidor mosquitto para mostrarlo por la web
+      inputString = "";
+      stringComplete = false;
+    }
+
+    else if(inputString == "Botón pulsado-"){
+      cliente.publish("Acciones", "Botón pulsado en local"); //Publicación en servidor mosquitto para mostrarlo por la web
+      inputString = "";
+      stringComplete = false;
+    }
+
+    else {
+      cliente.publish("Acciones", "Datos recibidos del arduino:"); //Publicación en servidor mosquitto para mostrarlo por la web
+      cliente.publish("Acciones", inputString.c_str());
+
+      int pos1 = inputString.indexOf('_');
+      Tactual = inputString.substring(0, pos1).toFloat();
+
+      int pos2 = inputString.indexOf('_', pos1 + 1);
+      Hactual = inputString.substring(pos1 + 1, pos2).toFloat();
+
+      int pos3 = inputString.indexOf('_', pos2 + 1);
+      Tactual1 = inputString.substring(pos2 + 1, pos3).toFloat();
+
+      int pos4 = inputString.indexOf('_', pos3 + 1);
+      Hactual1 = inputString.substring(pos3 + 1, pos4).toFloat();
+
+      int pos5 = inputString.indexOf('_', pos4 + 1);
+      Tactual2 = inputString.substring(pos4 + 1, pos5).toFloat();
+
+      int pos6 = inputString.indexOf('_', pos5 + 1);
+      Hactual2 = inputString.substring(pos5 + 1, pos6).toFloat();
+
+      int pos7 = inputString.indexOf('_', pos6 + 1);
+      Tdeseada = inputString.substring(pos6 + 1, pos7).toFloat();
+
+      Hdeseada = inputString.substring(pos7 + 1, inputString.length() - 1).toFloat();
+
+      inputString = "";
+      stringComplete = false;
+    }
+  }
+}
+
+//FUNCION para detectar la entrada de datos por el puerto serie
+void serialEvent() {
+  while (Serial.available()) {
+    char inChar = (char)Serial.read();
+    inputString += inChar;
+    if (inChar == '-') {
+      stringComplete = true;
+    }
+  }
+}
+
+void callback2(char* topic, byte* payload, unsigned int length) {
+  String receivedMessage = "";
+  for (int i = 0; i < length; i++) {
+    receivedMessage += (char)payload[i];
+  }
+
+  if (strcmp(topic, "Tdeseada") == 0) {
+    Tdeseadaremota = receivedMessage.toFloat();
+    Tdeseada = Tdeseadaremota;
+    cliente.publish("Acciones", "Nuevos datos Tdeseada y Hdeseada actualizados en remoto"); //Publicación en servidor mosquitto para mostrarlo por la web
+  } else if (strcmp(topic, "Hdeseada") == 0) {
+    Hdeseadaremota = receivedMessage.toFloat();
+    Hdeseada = Hdeseadaremota;
+    Serial.print(Tdeseadaremota);
+    Serial.print("_");
+    Serial.print(Hdeseadaremota);
+    Serial.println("-");
+    snprintf(msg2, MSG_BUFFER_SIZE, "Temperatura: %.2f Humedad: %.2f", Tdeseadaremota, Hdeseadaremota);
+    cliente.publish("Acciones", msg2); //Publicación en servidor mosquitto para mostrarlo por la web
+  }
+}
