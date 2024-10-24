@@ -45,6 +45,26 @@ String obtenerFechaHora(DateTime t) {
   return fechaHora;
 }
 
+String obtenerDatosSensores(){
+  String datos = "";
+  datos += "Datos sensor arriba:  TEMPERATURA - ";
+  datos += Tactual1;
+  datos += "ºC   HUMEDAD - ";
+  datos += Hactual1;
+  datos += "%\n";
+  datos += "Datos sensor abajo:  TEMPERATURA - ";
+  datos += Tactual2;
+  datos += "ºC   HUMEDAD - ";
+  datos += Hactual2;
+  datos += "%\n";
+  datos += "Datos armario:  TEMPERATURA - ";
+  datos += Tactual;
+  datos += "ºC   HUMEDAD - ";
+  datos += Hactual;
+  datos += "%\n";
+  return datos;
+}
+
 //INICIALIZACIÓN CONEXIÓN TARJETA SD
 void setup(){
   //Inicialización
@@ -77,24 +97,7 @@ void EnvioTarjetaSD(){
 
       Serial.println("Escribiendo datos sensores en SD");  //Mientras haya espacio en la tarjeta SD
       myFile.println(obtenerFechaHora(now));
-
-      myFile.print("Datos sensor arriba:  TEMPERATURA - ");
-      myFile.print(Tactual1);
-      myFile.print("ºC   HUMEDAD - ");
-      myFile.print(Hactual1);
-      myFile.println("%");
-      myFile.print("Datos sensor abajo:  TEMPERATURA - ");
-      myFile.print(Tactual2);
-      myFile.print("ºC   HUMEDAD - ");
-      myFile.print(Hactual2);
-      myFile.println("%");
-      myFile.print("Datos armario:  TEMPERATURA - ");
-      myFile.print(Tactual);
-      myFile.print("ºC   HUMEDAD - ");
-      myFile.print(Hactual);
-      myFile.println("%");
-      myFile.println();
-
+      myFile.println(obtenerDatosSensores());
       ultimoEnvio=millis();
       myFile.close();
     }
