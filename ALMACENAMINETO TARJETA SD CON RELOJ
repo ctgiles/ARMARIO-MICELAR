@@ -1,8 +1,6 @@
-//Biblioteca necesaria para Tarjeta SD
-#include <SD.h>
-
-//Bibliotecas necesarias para Módulo RTC
-#include <RTClib.h>
+//Bibliotecas
+#include <SD.h>      //Biblioteca necesaria para Tarjeta SD
+#include <RTClib.h>  //Bibliotecas necesarias para Módulo RTC
 
 //Variable tipo File
 File myFile;
@@ -17,14 +15,15 @@ float Hactual2=83;
 float Tactual=(Tactual1+Tactual2)/2;
 float Hactual=(Hactual1+Hactual2)/2;
 unsigned long ultimoEnvio = 0;
-unsigned long intervaloEnvio=10000; //Cambiar al intervalo que se quiera
+
+//Macros
+#define medidaSize 210        //NO CAMBIAR. Tamaño en caracteres de la escritura exacta de una medida
+#define maxBuffSize 100000    //Cambiar al tamaño que se quiera. Ahora almacena aprox 476 medidas
+#define intervaloEnvio 10000  //Cambiar al intervalo que se quiera
 
 //Puertos Necesarios
 #define CS 2   //X defecto es 4, pero necesitamos que sea el 2
-//Otros puertos que se usan - no hay que programarlos
-//MISO 50   //MasterIn-SlaveOut - envío datos de SD a Arduino
-//MOSI 51   //MasterOut-SlaveIn - envío datos de Arduino a SD
-//SCK 52    //Serial Clock - sincronización
+
 
 //Función para almacenar fecha y hora en un string
 String obtenerFechaHora(DateTime t) {
@@ -48,21 +47,48 @@ String obtenerFechaHora(DateTime t) {
 String obtenerDatosSensores(){
   String datos = "";
   datos += "Datos sensor arriba:  TEMPERATURA - ";
-  datos += Tactual1;
+  if (Tactual1<10) datos+='0';
+  datos += String(Tactual1,2);
   datos += "ºC   HUMEDAD - ";
-  datos += Hactual1;
+  if (Hactual1<10) datos+='0';
+  datos += String(Hactual1,2);
   datos += "%\n";
   datos += "Datos sensor abajo:  TEMPERATURA - ";
-  datos += Tactual2;
+  if (Tactual2<10) datos+='0';
+  datos += String(Tactual2, 2);
   datos += "ºC   HUMEDAD - ";
-  datos += Hactual2;
+  if (Hactual2<10) datos+='0';
+  datos += String(Hactual2, 2);
   datos += "%\n";
   datos += "Datos armario:  TEMPERATURA - ";
-  datos += Tactual;
+  if (Tactual<10) datos+='0';
+  datos += String(Tactual, 2);
   datos += "ºC   HUMEDAD - ";
-  datos += Hactual;
+  if (Hactual<10) datos+='0';
+  datos += String(Hactual, 2);
   datos += "%\n";
   return datos;
+}
+
+void recortarArchivo(const char* nombreArchivo){  //para pasarle el archivo original
+//LECTURA CONTENIDO FICHERO A PARTIR DE LA 2ª MEDIDA
+  File archivo=SD.open(nombreArchivo, FILE_READ);
+  if(!archivo){
+    Serial.print("Error al abrir el archivo para recortar");
+    return;
+  }
+  archivo.seek(medidaSize);  //Desplazar cursor al ppo de 2ª medida
+  String newArchivo="";      //Variable almacenamiento fichero desde ppo 2ª medida
+  while(archivo.available()) newArchivo+=(char)archivo.read(); //Almacenar contenido fichero
+  archivo.close();
+
+  //ESCRITURA CONTENIDO FICHERO A PARTIR DE LA 2ª MEDIDA
+  SD.remove(nombreArchivo);  //Borramos el contenido del fichero para no sobreescribir erroneamente
+  archivo=SD.open(nombreArchivo, FILE_WRITE);
+  archivo.print(newArchivo); //Sobreescribimos el contenido del fichero
+  archivo.close();
+
+  Serial.println("Archivo recortado exitosamente");
 }
 
 //INICIALIZACIÓN CONEXIÓN TARJETA SD
@@ -76,8 +102,7 @@ void setup(){
     Serial.println("No se pudo inicializar la tarjeta SD");
     return;
   }
-  else
-    Serial.println("Inicializacion exitosa CTG");
+  else Serial.println("Inicializacion exitosa CTG");
 
   //INICIALIZACIÓN MÓDULO RTC
   if (!rtc.begin()) {
@@ -94,16 +119,18 @@ void EnvioTarjetaSD(){
     now = rtc.now();
     myFile = SD.open("archivo.txt", FILE_WRITE); //Abrir archivo de toma de datos en modo escritura
     if (myFile) {
-
       Serial.println("Escribiendo datos sensores en SD");  //Mientras haya espacio en la tarjeta SD
       myFile.println(obtenerFechaHora(now));
       myFile.println(obtenerDatosSensores());
+      Serial.println(obtenerFechaHora(now));
+      Serial.println(obtenerDatosSensores());
       ultimoEnvio=millis();
       myFile.close();
+
+      //Comprobamos tamaño del archivo y recortamos si necesario
+      if (SD.open("archivo.txt").size() > maxBuffSize) recortarArchivo("archivo.txt");
     }
-    else{
-      Serial.println("Error al escribir datos de los sensores en la tarjeta SD");
-    }   
+    else Serial.println("Error al escribir datos de los sensores en la tarjeta SD");
   }
 }
 
