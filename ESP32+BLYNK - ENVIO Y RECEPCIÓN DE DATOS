@@ -1,0 +1,104 @@
+//Proporcionado por la plataforma de Blynk
+//Estas lineas tienen que ser SIEMPRE las primeras
+#define BLYNK_TEMPLATE_ID "TMPL5DILF5nXA"
+#define BLYNK_TEMPLATE_NAME "PRUEBA ESP32"
+#define BLYNK_AUTH_TOKEN "44Lw6n_QinVMmkmeBrKftLJ0d6ePqDQc"
+
+//Bibliotecas necesarias
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+
+//Credenciales de la red wifi
+#define NETWORK "Abcdefg"
+#define PASSWORD "gatitosperritos123"
+
+//Variables para que funcione el programa de ejemplo
+float Tactual1=10;
+float Hactual1=80;
+float Tactual2=15;
+float Hactual2=83;
+float Tactual=(Tactual1+Tactual2)/2;
+float Hactual=(Hactual1+Hactual2)/2;
+float Tobjetivo;
+float Hobjetivo;
+
+//Variables necesarias
+unsigned long ultimoEnvio = 0;
+unsigned long intervaloEnvio = 1000;
+unsigned long dutyCycle = 9000;
+
+void setup() {
+  Serial.begin(115200);
+  Blynk.begin(BLYNK_AUTH_TOKEN, NETWORK, PASSWORD);
+}
+
+void CambioValores(){
+  if((millis()%dutyCycle>0) && (millis()%dutyCycle<3000)){
+    Tactual1 = 20;
+    Tactual2 = 25;
+    Hactual1 = 76;
+    Hactual2 = 60;
+    Tactual = (Tactual1+Tactual2)/2;
+    Hactual = (Hactual1+Hactual2)/2;
+    Hobjetivo = 35;
+    Tobjetivo = 93;
+  }
+  else if((millis()%dutyCycle>3000) && (millis()%dutyCycle<6000)){
+    Tactual1 = 30;
+    Tactual2 = 15;
+    Hactual1 = 96;
+    Hactual2 = 80;
+    Tactual = (Tactual1+Tactual2)/2;
+    Hactual = (Hactual1+Hactual2)/2;
+    Hobjetivo = 27;
+    Tobjetivo = 79;
+  }
+  else if((millis()%dutyCycle>6000) && (millis()%dutyCycle<9000)){
+    Tactual1 = 40;
+    Tactual2 = 35;
+    Hactual1 = 58;
+    Hactual2 = 58;
+    Tactual = (Tactual1+Tactual2)/2;
+    Hactual = (Hactual1+Hactual2)/2;
+    Hobjetivo = 50;
+    Tobjetivo = 40;
+  }
+}
+
+void EnvioDatosBlynk(){
+  if((millis()- ultimoEnvio)>intervaloEnvio){
+    // Envía los datos a los Datastreams de Blynk
+    Blynk.virtualWrite(V0, Tactual1);       // Envía Tactual1 al Gauge correspondiente
+    Blynk.virtualWrite(V1, Hactual1);       // Envía Hactual1 al Gauge correspondiente
+    Blynk.virtualWrite(V2, Tactual2);       // Envía Tactual2 al Gauge correspondiente
+    Blynk.virtualWrite(V3, Hactual2);       // Envía Hactual2 al Gauge correspondiente
+    Blynk.virtualWrite(V4, Tactual);        // Envía Tactual al Gauge correspondiente
+    Blynk.virtualWrite(V5, Hactual);        // Envía Hactual al Gauge correspondiente
+    Blynk.virtualWrite(V6, Tobjetivo);       // Envía Tobjetivo al Gauge y Slider correspondiente
+    Blynk.virtualWrite(V7, Hobjetivo);       // Envía Hobjetivo al Gauge y Slider correspondiente
+
+    ultimoEnvio = millis();
+  }
+}
+
+//FUNCIONES PARA RECIBIR DATOS DE BLYNK
+BLYNK_WRITE(V6){    //Temperatura Deseada
+  Tobjetivo = param.asFloat();
+  Serial.print("Nueva temperatura deseada: ");
+  Serial.print(Tobjetivo);
+  Serial.println(" ºC");
+}
+
+BLYNK_WRITE(V7){    //Humedad Deseada
+  Hobjetivo = param.asFloat();
+  Serial.print("Nueva humedad deseada: ");
+  Serial.print(Hobjetivo);
+  Serial.println(" %");
+}
+
+void loop() {
+  Blynk.run();
+  EnvioDatosBlynk();
+  CambioValores();
+}
