@@ -1,0 +1,134 @@
+//Proporcionado por la plataforma de Blynk
+//Estas lineas tienen que ser SIEMPRE las primeras
+#define BLYNK_TEMPLATE_ID "TMPL5DILF5nXA"
+#define BLYNK_TEMPLATE_NAME "PRUEBA ESP32"
+#define BLYNK_AUTH_TOKEN "44Lw6n_QinVMmkmeBrKftLJ0d6ePqDQc"
+
+//Bibliotecas necesarias
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+
+//Credenciales de la red wifi
+#define NETWORK "Abcdefg"
+#define PASSWORD "gatitosperritos123"
+
+//Variables para que funcione el programa de ejemplo
+float Tactual1=10;
+float Hactual1=80;
+float Tactual2=15;
+float Hactual2=83;
+float Tactual=(Tactual1+Tactual2)/2;
+float Hactual=(Hactual1+Hactual2)/2;
+float Tobjetivo;
+float Hobjetivo;
+
+//Variables necesarias
+unsigned long ultimoEnvio = 0;
+unsigned long ultimaRecepcion = 0;
+unsigned long intervaloEnvio = 1000;
+String inputString = "";
+bool stringComplete = false;
+
+
+
+void setup() {
+  Serial.begin(115200);
+  Blynk.begin(BLYNK_AUTH_TOKEN, NETWORK, PASSWORD);
+}
+
+//------------------------------COMUNICACIÓN ARDUINO Y ESP32---------------------------------------
+//Función para avisar que se reciben datos por el Serial
+void serialEvent() {
+  while (Serial1.available()) {          //.available()=true si hay datos en el buffer de recepción
+    char inChar = (char)Serial1.read();  //lee el primer caracter en el buffer y lo guarda en char
+    inputString += inChar;               //almacena cada caracter en un string
+    if (inChar == '-') stringComplete = true;  //'-' = char que indica fin de cadena en el buffer
+  }   //se pasa al siguiente elemento del buffer y se vuelve a evaluar el while
+}
+
+void LecturaDatosArduino(){
+  serialEvent();
+  delay(1);
+  if(stringComplete){
+    int pos1 = inputString.indexOf('_');
+    Tactual = inputString.substring(0, pos1).toFloat();
+
+    int pos2 = inputString.indexOf('_', pos1 + 1);
+    Hactual = inputString.substring(pos1 + 1, pos2).toFloat();
+
+    int pos3 = inputString.indexOf('_', pos2 + 1);
+    Tactual1 = inputString.substring(pos2 + 1, pos3).toFloat();
+
+    int pos4 = inputString.indexOf('_', pos3 + 1);
+    Hactual1 = inputString.substring(pos3 + 1, pos4).toFloat();
+
+    int pos5 = inputString.indexOf('_', pos4 + 1);
+    Tactual2 = inputString.substring(pos4 + 1, pos5).toFloat();
+
+    int pos6 = inputString.indexOf('_', pos5 + 1);
+    Hactual2 = inputString.substring(pos5 + 1, pos6).toFloat();
+
+    int pos7 = inputString.indexOf('_', pos6 + 1);
+    Tobjetivo = inputString.substring(pos6 + 1, pos7).toFloat();
+
+    Hobjetivo = inputString.substring(pos7 + 1, inputString.length() - 1).toFloat();
+
+    inputString = "";
+    stringComplete = false;
+  }
+}
+
+void EnvioDatosArduino(){
+  if((millis()- ultimaRecepcion)>intervaloEnvio){
+    String datos="";
+    datos+=Tobjetivo;
+    datos+='_';
+    datos+=Hobjetivo;
+    datos+='-';
+    ultimaRecepcion = millis();
+    Serial.print(datos);
+  }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------COMUNICACIÓN ESP32 Y BLYNK-----------------------------------------
+void EnvioDatosBlynk(){
+  if((millis()- ultimoEnvio)>intervaloEnvio){
+    // Envía los datos a los Datastreams de Blynk
+    Blynk.virtualWrite(V0, Tactual1);       // Envía Tactual1 al Gauge correspondiente
+    Blynk.virtualWrite(V1, Hactual1);       // Envía Hactual1 al Gauge correspondiente
+    Blynk.virtualWrite(V2, Tactual2);       // Envía Tactual2 al Gauge correspondiente
+    Blynk.virtualWrite(V3, Hactual2);       // Envía Hactual2 al Gauge correspondiente
+    Blynk.virtualWrite(V4, Tactual);        // Envía Tactual al Gauge correspondiente
+    Blynk.virtualWrite(V5, Hactual);        // Envía Hactual al Gauge correspondiente
+    Blynk.virtualWrite(V6, Tobjetivo);       // Envía Tobjetivo al Gauge y Slider correspondiente
+    Blynk.virtualWrite(V7, Hobjetivo);       // Envía Hobjetivo al Gauge y Slider correspondiente
+
+    ultimoEnvio = millis();
+  }
+}
+
+//FUNCIONES PARA RECIBIR DATOS DE BLYNK
+BLYNK_WRITE(V6){    //Temperatura Deseada
+  Tobjetivo = param.asFloat();
+  Serial.print("Nueva temperatura deseada: ");
+  Serial.print(Tobjetivo);
+  Serial.println(" ºC");
+}
+
+BLYNK_WRITE(V7){    //Humedad Deseada
+  Hobjetivo = param.asFloat();
+  Serial.print("Nueva humedad deseada: ");
+  Serial.print(Hobjetivo);
+  Serial.println(" %");
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void loop() {
+  Blynk.run();
+  LecturaDatosArduino();
+  EnvioDatosBlynk();
+}
