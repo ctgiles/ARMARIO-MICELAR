@@ -23,7 +23,7 @@
 #define PIN_TEMPOBJ V6
 #define PIN_HUMOBJ V7
 
-//Variables de temperatura
+//Variables de temperatura y humedad
 float Tactual1;
 float Hactual1;
 float Tactual2;
