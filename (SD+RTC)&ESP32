@@ -1,30 +1,32 @@
-//Bibliotecas
+//Bibliotecas necesarias
 #include <SD.h>      //Biblioteca necesaria para Tarjeta SD
 #include <RTClib.h>  //Bibliotecas necesarias para Módulo RTC
 
-//Variable tipo File
+//Variables para Tarjeta SD
 File myFile;
 RTC_DS1307 rtc;
 DateTime now;
 
-//Variables para que funcione el programa de ejemplo
+//Variables de temperatura y humedad
 float Tactual1=10;
 float Hactual1=80;
 float Tactual2=15;
 float Hactual2=83;
 float Tactual=(Tactual1+Tactual2)/2;
 float Hactual=(Hactual1+Hactual2)/2;
-float Tdeseada;
-float Hdeseada;
-float TdeseadaRemota;
-float HdeseadaRemota;
+float Tobjetivo;
+float Hobjetivo;
+
+//Variables de tiempo 
 unsigned long ultimoEnvioSD = 0;
 unsigned long ultimoEnvioESP = 0;
+
+//Variables de recepcion de datos
 String inputString="";
 bool stringComplete=false;
 
 //Macros
-#define medidaSize 210        //NO CAMBIAR. Tamaño en caracteres de la escritura exacta de una medida
+#define medidaSize 210        //NO CAMBIAR. Tamaño (caracteres) de escritura exacta de una medida
 #define maxBuffSize 100000    //Cambiar al tamaño que se quiera. Ahora almacena aprox 476 medidas
 #define intervaloEnvio 10000  //Cambiar al intervalo que se quiera
 
@@ -32,7 +34,8 @@ bool stringComplete=false;
 #define CS 2   //X defecto es 4, pero necesitamos que sea el 2
 
 
-//FUNCIONES TARJETA SD
+//==============================FUNCIONES==========================================================
+//------------------------------FUNCIONES TARJETA SD-----------------------------------------------
 //Función para almacenar fecha y hora en un string
 String obtenerFechaHora(DateTime t) {
   String fechaHora = "";
@@ -100,8 +103,9 @@ void recortarArchivo(const char* nombreArchivo){  //para pasarle el archivo orig
 
   Serial.println("Archivo recortado exitosamente");
 }
+//-------------------------------------------------------------------------------------------------
 
-//FUNCIONES ESP32
+//------------------------------FUNCIONES ESP32----------------------------------------------------
 //Función para almacenar lectura de los sensores en un string
 String obtenerDatosSensoresESP(){
   String datos="";
@@ -117,9 +121,9 @@ String obtenerDatosSensoresESP(){
   datos+='_';
   datos+=Hactual;
   datos+='_';
-  datos+=Tdeseada;
+  datos+=Tobjetivo;
   datos+='_';
-  datos+=Hdeseada;
+  datos+=Hobjetivo;
   datos+='-';
   return datos;
 }
@@ -132,38 +136,39 @@ void serialEvent() {
     if (inChar == '-') stringComplete = true;  //'-' = char que indica fin de cadena en el buffer
   }   //se pasa al siguiente elemento del buffer y se vuelve a evaluar el while
 }
+//-------------------------------------------------------------------------------------------------
 
-
-//INICIALIZACIÓN CONEXIÓN TARJETA SD
 void setup(){
   //Inicialización
   Serial.begin(115200);
   Serial1.begin(115200);
 
-  //INICIALIZACIÓN TARJETA SD
-  Serial.println("Iniciando SD CTG");
+  //Inicialización tarjeta SD
+  Serial.println("Iniciando SD");
   if (!SD.begin(CS)) {  //Comprueba que esté conectado el CSPIN
     Serial.println("No se pudo inicializar la tarjeta SD");
     return;
   }
-  else Serial.println("Inicializacion exitosa CTG");
+  else Serial.println("Inicializacion tarjeta SD exitosa ");
 
-  //INICIALIZACIÓN MÓDULO RTC
+  //Inicialización módulo RTC
   if (!rtc.begin()) {
     Serial.println("No se puede encontrar RTC");
-    while (1);
+    while (1); //es necesario que conecte
   }
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Ajusta el RTC con la hora de compilación
   now = rtc.now();
   Serial.println(obtenerFechaHora(now));
 
   //INICIALIZACIÓN CONEXIÓN ESP32
-  if (Serial1.available()) {
-    String message = Serial1.readStringUntil('\n'); // Lee hasta el salto de línea
-    Serial.println(message); // Imprime el mensaje en el Serial Monitor
+  if (!Serial1.available()) {
+    Serial.println("No se pudo conectar con el ESP32");
+    return;
   }
+  else Serial.println("Conexion con ESP32 exitosa");
 }
 
+//------------------------------FUNCIONES PRINCIPALES----------------------------------------------
 void EnvioTarjetaSD(){
   if((millis()- ultimoEnvioSD)>intervaloEnvio){
     now = rtc.now();
@@ -199,20 +204,21 @@ void LecturaDatosESP() {
     Serial.println(inputString);
 
     int pos1 = inputString.indexOf('_');
-    TdeseadaRemota = inputString.substring(0, pos1).toFloat();
-    Tdeseada = TdeseadaRemota;
-    Serial.print("Tdeseada:");
-    Serial.println(Tdeseada);
+    Tobjetivo = inputString.substring(0, pos1).toFloat();
+    Serial.print("Temperatura Objetivo:");
+    Serial.print(Tobjetivo);
+    Serial.println(" ºC");
 
-    HdeseadaRemota = inputString.substring(pos1 + 1, (inputString.length() - 1)).toFloat();
-    Hdeseada = HdeseadaRemota;
-    Serial.print("Hdeseada:");
-    Serial.println(Hdeseada);
+    Hobjetivo = inputString.substring(pos1 + 1, (inputString.length() - 1)).toFloat();
+    Serial.print("Humedad Objetivo:");
+    Serial.print(Hobjetivo);
+    Serial.println(" ºC");
 
     inputString = "";
     stringComplete = false;
   }
 }
+//-------------------------------------------------------------------------------------------------
 
 void loop(){
   EnvioTarjetaSD();
