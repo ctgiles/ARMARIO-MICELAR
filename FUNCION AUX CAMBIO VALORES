@@ -1,0 +1,15 @@
+//Variable de tiempo de ciclo
+unsigned long dutyCycle 9000
+
+//Función de cambio de valores
+void CambioValores(){
+  if((millis()%dutyCycle>0) && (millis()%dutyCycle<3000)){
+    //Valores primeros 3s
+  }
+  else if((millis()%dutyCycle>3000) && (millis()%dutyCycle<6000)){
+    //Valores segundos 3s
+  }
+  else if((millis()%dutyCycle>6000) && (millis()%dutyCycle<9000)){
+    //Valores terceros 3s
+  }
+}
