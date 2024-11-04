@@ -8,18 +8,19 @@ RTC_DS1307 rtc;
 DateTime now;
 
 //Variables de temperatura y humedad
-float Tactual1=10;
-float Hactual1=80;
-float Tactual2=15;
-float Hactual2=83;
-float Tactual=(Tactual1+Tactual2)/2;
-float Hactual=(Hactual1+Hactual2)/2;
+float Tactual1;
+float Hactual1;
+float Tactual2;
+float Hactual2;
+float Tactual;
+float Hactual;
 float Tobjetivo;
 float Hobjetivo;
 
 //Variables de tiempo 
 unsigned long ultimoEnvioSD = 0;
 unsigned long ultimoEnvioESP = 0;
+unsigned long dutyCycle=9000;
 
 //Variables de recepcion de datos
 String inputString="";
@@ -191,6 +192,8 @@ void EnvioTarjetaSD(){
 
 void EnvioDatosESP(){
   if ((millis() - ultimoEnvioESP) > intervaloEnvio) {
+    Tactual=(Tactual1+Tactual2)/2;
+    Hactual=(Hactual1+Hactual2)/2;
     Serial.println(obtenerDatosSensoresESP());
     Serial1.println(obtenerDatosSensoresESP());
     ultimoEnvioESP = millis();
@@ -218,10 +221,39 @@ void LecturaDatosESP() {
     stringComplete = false;
   }
 }
+
+//Función de cambio de valores
+void CambioValores(){
+  if((millis()%dutyCycle>0) && (millis()%dutyCycle<3000)){
+    Tactual1 = 30;
+    Hactual1 = 90;
+    Tactual2 = 40;
+    Hactual2 = 70;
+    Tobjetivo = 20;
+    Hobjetivo = 80;
+  }
+  else if((millis()%dutyCycle>3000) && (millis()%dutyCycle<6000)){
+    Tactual1 = 10;
+    Hactual1 = 60;
+    Tactual2 = 20;
+    Hactual2 = 90;
+    Tobjetivo = 40;
+    Hobjetivo = 60;
+  }
+  else if((millis()%dutyCycle>6000) && (millis()%dutyCycle<9000)){
+    Tactual1 = 50;
+    Hactual1 = 75;
+    Tactual2 = 60;
+    Hactual2 = 30;
+    Tobjetivo = 90;
+    Hobjetivo = 40;
+  }
+}
 //-------------------------------------------------------------------------------------------------
 
 void loop(){
   EnvioTarjetaSD();
   EnvioDatosESP();
   LecturaDatosESP();
+  CambioValores();
 }
