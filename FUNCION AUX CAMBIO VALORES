@@ -1,5 +1,5 @@
 //Variable de tiempo de ciclo
-unsigned long dutyCycle 9000
+unsigned long dutyCycle 9000;
 
 //Función de cambio de valores
 void CambioValores(){
