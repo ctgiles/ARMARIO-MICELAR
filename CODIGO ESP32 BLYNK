@@ -77,22 +77,22 @@ void LecturaDatosArduino(){
   delay(1);
   if(stringComplete){
     int pos1 = inputString.indexOf('_');
-    Tactual = inputString.substring(0, pos1).toFloat();
+    Tactual1 = inputString.substring(0, pos1).toFloat();
 
     int pos2 = inputString.indexOf('_', pos1 + 1);
-    Hactual = inputString.substring(pos1 + 1, pos2).toFloat();
+    Hactual1 = inputString.substring(pos1 + 1, pos2).toFloat();
 
     int pos3 = inputString.indexOf('_', pos2 + 1);
-    Tactual1 = inputString.substring(pos2 + 1, pos3).toFloat();
+    Tactual2 = inputString.substring(pos2 + 1, pos3).toFloat();
 
     int pos4 = inputString.indexOf('_', pos3 + 1);
-    Hactual1 = inputString.substring(pos3 + 1, pos4).toFloat();
+    Hactual2 = inputString.substring(pos3 + 1, pos4).toFloat();
 
     int pos5 = inputString.indexOf('_', pos4 + 1);
-    Tactual2 = inputString.substring(pos4 + 1, pos5).toFloat();
+    Tactual = inputString.substring(pos4 + 1, pos5).toFloat();
 
     int pos6 = inputString.indexOf('_', pos5 + 1);
-    Hactual2 = inputString.substring(pos5 + 1, pos6).toFloat();
+    Hactual = inputString.substring(pos5 + 1, pos6).toFloat();
 
     int pos7 = inputString.indexOf('_', pos6 + 1);
     Tobjetivo = inputString.substring(pos6 + 1, pos7).toFloat();
