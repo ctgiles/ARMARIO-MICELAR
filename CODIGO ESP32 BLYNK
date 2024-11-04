@@ -24,12 +24,12 @@
 #define PIN_HUMOBJ V7
 
 //Variables de temperatura
-float Tactual1=10;
-float Hactual1=80;
-float Tactual2=15;
-float Hactual2=83;
-float Tactual=(Tactual1+Tactual2)/2;
-float Hactual=(Hactual1+Hactual2)/2;
+float Tactual1;
+float Hactual1;
+float Tactual2;
+float Hactual2;
+float Tactual;
+float Hactual;
 float Tobjetivo;
 float Hobjetivo;
 
