@@ -8,14 +8,14 @@ RTC_DS1307 rtc;
 DateTime now;
 
 //Variables de temperatura y humedad
-float Tactual1;
-float Hactual1;
-float Tactual2;
-float Hactual2;
-float Tactual;
-float Hactual;
-float Tobjetivo;
-float Hobjetivo;
+volatile float Tactual1;
+volatile float Hactual1;
+volatile float Tactual2;
+volatile float Hactual2;
+volatile float Tactual;
+volatile float Hactual;
+volatile float Tobjetivo;
+volatile float Hobjetivo;
 
 //Variables de tiempo 
 unsigned long ultimoEnvioSD = 0;
@@ -192,8 +192,6 @@ void EnvioTarjetaSD(){
 
 void EnvioDatosESP(){
   if ((millis() - ultimoEnvioESP) > intervaloEnvio) {
-    Tactual=(Tactual1+Tactual2)/2;
-    Hactual=(Hactual1+Hactual2)/2;
     Serial.println(obtenerDatosSensoresESP());
     Serial1.println(obtenerDatosSensoresESP());
     ultimoEnvioESP = millis();
@@ -252,8 +250,11 @@ void CambioValores(){
 //-------------------------------------------------------------------------------------------------
 
 void loop(){
+  Tactual = (Tactual1+Tactual2)/2;
+  Hactual = (Hactual1+Hactual2)/2;
+
+  CambioValores();
   EnvioTarjetaSD();
   EnvioDatosESP();
   LecturaDatosESP();
-  CambioValores();
 }
