@@ -1,8 +1,8 @@
 //Proporcionado por la plataforma de Blynk
 //Estas lineas tienen que ser SIEMPRE las primeras
-#define BLYNK_TEMPLATE_ID "TMPL5DILF5nXA"
-#define BLYNK_TEMPLATE_NAME "PRUEBA ESP32"
-#define BLYNK_AUTH_TOKEN "44Lw6n_QinVMmkmeBrKftLJ0d6ePqDQc"
+#define BLYNK_TEMPLATE_ID "TMPL5Hczr7GZk"
+#define BLYNK_TEMPLATE_NAME "ESP32 ARMARIO CULTIVO"
+#define BLYNK_AUTH_TOKEN "nunBXZcBClp6_ABsFDkQPuW4HhrrhW74"
 
 //Bibliotecas necesarias
 #include <WiFi.h>
