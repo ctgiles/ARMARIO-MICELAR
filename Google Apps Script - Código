@@ -1,0 +1,30 @@
+function doPost(e) {
+  const imageName = Utilities.formatDate(new Date(), 'GMT-4', 'yyyyMMdd-HHmmss') + '.jpg';
+
+  const folderName = e.parameters.folder || 'ESP32-CAM';
+  const savingFolder = getFolder(folderName);
+
+  // procesamos el json
+  var requestData = e.postData.contents;
+  var jsonData = JSON.parse(requestData);
+  var base64Image = jsonData.imageData;
+  var base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
+  const decodedImage = Utilities.base64Decode(base64Data);
+
+  // creamos un objeto binario para la imagen
+  const blob = Utilities.newBlob(decodedImage, 'image/jpeg', imageName);
+  const file = savingFolder.createFile(blob);
+  return ContentService.createTextOutput('Done');
+}
+
+function getFolder(folderName) {
+  let outputFolder;
+
+  const folders = DriveApp.getFoldersByName(folderName);
+  if (folders.hasNext()) {
+    outputFolder = folders.next();
+  } else {
+    outputFolder = DriveApp.createFolder(folderName);
+  }
+  return outputFolder;
+}
