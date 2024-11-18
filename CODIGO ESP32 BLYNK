@@ -112,7 +112,7 @@ void EnvioDatosArduino(){
     datos+=Hobjetivo;
     datos+='-';
     ultimaRecepcion = millis();
-    Serial.print(datos);
+    Serial.println(datos);
   }
 }
 //-------------------------------------------------------------------------------------------------
