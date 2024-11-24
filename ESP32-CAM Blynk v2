@@ -4,7 +4,6 @@
 #define BLYNK_TEMPLATE_NAME "ESP32 ARMARIO CULTIVO"
 #define BLYNK_AUTH_TOKEN "nunBXZcBClp6_ABsFDkQPuW4HhrrhW74"
 
-//Bibliotecas necesarias
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -19,48 +18,32 @@
 #include "camera_pins.h"
 
 //Equivalencia de pines
-#define SEND_PHOTO V8
-#define TAKE_PHOTO V9
+#define PHOTO V8
 #define LED 4
 
 //Variables Dirección IP
 String local_IP;
 
+
 void startCameraServer();
 
-void takePhoto() {
+void takePhoto()
+{
   digitalWrite(LED, HIGH);
   delay(200);
   uint32_t randomNum = random(50000);
   Serial.println("http://"+local_IP+"/capture?_cb="+ (String)randomNum);
-  Blynk.setProperty(SEND_PHOTO, "urls", "http://"+local_IP+"/capture?_cb="+(String)randomNum);
+  Blynk.setProperty(PHOTO, "urls", "http://"+local_IP+"/capture?_cb="+(String)randomNum);
   digitalWrite(LED, LOW);
   delay(1000);
 }
 
-void wifiConfig(){
-  WiFi.mode(WIFI_STA);
-
-  Serial.println("");
-  Serial.print("Connecting to ");
-  Serial.println(NETWORK);
-  WiFi.begin(NETWORK, PASSWORD);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
-
-  Serial.println("");
-  Serial.println("STAIP address: ");
-  local_IP = WiFi.localIP().toString();
-  Serial.println(local_IP);
-  Serial.println("");
-}
-
-void cameraConfig(){
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED,OUTPUT);
+  Serial.setDebugOutput(true);
+  Serial.println();
+  
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -99,26 +82,42 @@ void cameraConfig(){
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
-    delay(1000);
-    ESP.restart();
+    return;
   }
-}
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(LED,OUTPUT);
-  Serial.println();
-  
-  wifiConfig();
-  cameraConfig();
+  sensor_t * s = esp_camera_sensor_get();
+  // initial sensors are flipped vertically and colors are a bit saturated
+  if (s->id.PID == OV3660_PID) {
+    s->set_vflip(s, 1); // flip it back
+    s->set_brightness(s, 1); // up the brightness just a bit
+    s->set_saturation(s, -2); // lower the saturation
+  }
+  // drop down frame size for higher initial frame rate
+  s->set_framesize(s, FRAMESIZE_QVGA);
+
+  WiFi.begin(NETWORK, PASSWORD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+
   startCameraServer();
+
+  Serial.print("Camera Ready! Use 'http://");
+  Serial.print(WiFi.localIP());
+  local_IP = WiFi.localIP().toString();
+  Serial.println("' to connect");
   Blynk.begin(BLYNK_AUTH_TOKEN, NETWORK, PASSWORD);
 }
 
-BLYNK_WRITE(TAKE_PHOTO){
+BLYNK_WRITE(PHOTO){
   int buttonState = param.asInt(); // Lee el estado del botón (0: OFF, 1: ON)
   if (buttonState == 1) {
     Serial.println("Capture Photo");
+
     takePhoto();
   }  
 }
