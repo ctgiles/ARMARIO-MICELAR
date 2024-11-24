@@ -24,6 +24,9 @@
 //Variables Dirección IP
 String local_IP;
 
+unsigned long ultimaFoto = 0;
+unsigned long intervaloFoto = 25000;
+
 
 void startCameraServer();
 
@@ -40,9 +43,10 @@ void takePhoto()
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED,OUTPUT);
+  pinMode(LED,OUTPUT);  //Configuración LED-FLASH ESP32
   Serial.println();
   
+  //-----CONFIGURACIÓN CÁMARA-----------------------------------
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -64,9 +68,7 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  
-  // if PSRAM IC present, init with UXGA resolution and higher JPEG quality
-  //                      for larger pre-allocated frame buffer.
+
   if(psramFound()){
     config.frame_size = FRAMESIZE_UXGA;
     config.jpeg_quality = 10;
@@ -77,30 +79,42 @@ void setup() {
     config.fb_count = 1;
   }
 
-  // camera init
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
-    return;
+    delay(1000);
+    ESP.restart();
   }
 
+
+  //------------------------------------------------------------
+  
+  //-----CONFIGURACIÓN WIFI-------------------------------------
+  WiFi.mode(WIFI_STA);
+
+  Serial.println("");
+  Serial.print("Connecting to ");
+  Serial.println(NETWORK);
 
   WiFi.begin(NETWORK, PASSWORD);
-
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
     Serial.print(".");
+    delay(500);
   }
+
   Serial.println("");
   Serial.println("WiFi connected");
 
-  startCameraServer();
-
-  Serial.print("Camera Ready! Use 'http://");
-  Serial.print(WiFi.localIP());
+  Serial.println("");
   local_IP = WiFi.localIP().toString();
-  Serial.println("' to connect");
-  Blynk.begin(BLYNK_AUTH_TOKEN, NETWORK, PASSWORD);
+  Serial.println("STAIP address: ");
+  Serial.println(local_IP);
+  Serial.println("");
+
+  //------------------------------------------------------------
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, NETWORK, PASSWORD);  //INICIALIZACIÓN BLYNK
+  startCameraServer();
 }
 
 BLYNK_WRITE(PHOTO){
@@ -113,4 +127,9 @@ BLYNK_WRITE(PHOTO){
 
 void loop() {
   Blynk.run();
+  if((millis() - ultimaFoto)>intervaloFoto){
+    Serial.println("Capture Photo");
+    takePhoto();
+    ultimaFoto = millis();
+  }
 }
