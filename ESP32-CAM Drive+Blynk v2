@@ -75,9 +75,21 @@ void startCameraServer();
 void takePhoto(){
   digitalWrite(LED, HIGH);
   delay(200);
+
+  // Captura una nueva imagen para asegurarse de que es actual
+  camera_fb_t *fb = esp_camera_fb_get();  
+  if (!fb) {
+    Serial.println("Camera capture failed");
+    digitalWrite(LED, LOW);
+    return;
+  }
+
   uint32_t randomNum = random(50000);
   Serial.println("http://"+local_IP+"/capture?_cb="+ (String)randomNum);
   Blynk.setProperty(PHOTO, "urls", "http://"+local_IP+"/capture?_cb="+(String)randomNum);
+
+  esp_camera_fb_return(fb); // Libera el framebuffer para permitir una nueva captura
+
   digitalWrite(LED, LOW);
   delay(1000);
 }
@@ -96,6 +108,7 @@ void saveCapturedImage(){
     fb = esp_camera_fb_get();  
     if(!fb) {
       Serial.println("Camera capture failed");
+      digitalWrite(LED, LOW);
       delay(1000);
       ESP.restart();
       return;
