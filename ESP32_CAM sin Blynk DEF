@@ -15,14 +15,17 @@ const char* password = "gatitosperritos123";   //your network password
 
 //Variables necesarias conexión con Google Apps Scrit y Drive
 const char* myDomain = "script.google.com";
-String myScript = "/macros/s/AKfycbwIBDx-fFCBN9YTlzCTvWrgG7QxnhWabb7ZZsme3XyL_SOjrpNnGwkmKuY4fwWuVFhz/exec";    //Replace with your own url
+String myScript = "/macros/s/AKfycbwENy_VYY2uqIF4wTAgaO_Llfl_zyhtTwkeixR_x3zyyVOT4gXRD-inhkiK56YTsx9t/exec";    //Replace with your own url
 String myFilename = "filename=ESP32-CAM.jpg";
 String mimeType = "&mimetype=image/jpeg";
 String myImage = "&data=";
 
 //Variables de tiempo
-int waitingTime = 30000; //Wait 30 seconds to google response.
+int waitingTime = 60000; //Wait 30 seconds to google response.
 long int StartTime=31000;
+//Envio Google Drive
+unsigned long ultimaFotoDrive = 0;
+unsigned long intervaloFotoDrive = 60000;
 
 //Puertos para ESP32
 #define PWDN_GPIO_NUM     32
@@ -199,10 +202,11 @@ void setup(){
   cameraConfig();
 }
 
-boolean enviar = true;
+
 
 void loop(){
-  saveCapturedImage();
-  enviar = false;
-  delay(60000);
+  if((millis()- ultimaFotoDrive)>intervaloFotoDrive){
+    saveCapturedImage();
+    ultimaFotoDrive = millis();
+  }
 }
