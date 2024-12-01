@@ -73,6 +73,7 @@ unsigned long intervaloFotoDrive = 60000;
 void startCameraServer();
 
 void takePhoto(){
+  Serial.println("CAPTURE PHOTO - BLYNK");
   digitalWrite(LED, HIGH);
   delay(200);
 
@@ -86,6 +87,7 @@ void takePhoto(){
 
   uint32_t randomNum = random(50000);
   Serial.println("http://"+local_IP+"/capture?_cb="+ (String)randomNum);
+  Serial.println();
   Blynk.setProperty(PHOTO, "urls", "http://"+local_IP+"/capture?_cb="+(String)randomNum);
 
   esp_camera_fb_return(fb); // Libera el framebuffer para permitir una nueva captura
@@ -260,19 +262,13 @@ void setup() {
 
 BLYNK_WRITE(PHOTO){
   int buttonState = param.asInt(); // Lee el estado del botón (0: OFF, 1: ON)
-  if (buttonState == 1) {
-    Serial.println("CAPTURE PHOTO - BLYNK");
-    takePhoto();
-    Serial.println();
-  }  
+  if (buttonState == 1) takePhoto();
 }
 
 void loop() {
   Blynk.run();
   if((millis() - ultimaFotoBlynk)>intervaloFotoBlynk){
-    Serial.println("CAPTURE PHOTO - BLYNK");
     takePhoto();
-    Serial.println();
     ultimaFotoBlynk = millis();
   }
 
