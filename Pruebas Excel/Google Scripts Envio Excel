@@ -1,0 +1,31 @@
+function doPost(e){
+  // Nombre de la hoja de cálculo
+  var spreadsheetName = "MiHojaDeDatos";
+
+  // Buscar si ya existe la hoja de cálculo
+  var files = DriveApp.getFilesByName(spreadsheetName);
+  var spreadsheet;
+
+  // Si existe, abrirla. Si no, crear una nueva.
+  if (files.hasNext()) {
+    spreadsheet = SpreadsheetApp.open(files.next());
+  } else {
+    spreadsheet = SpreadsheetApp.create(spreadsheetName);
+    // Obtener la primera hoja y agregar encabezados
+    var sheet = spreadsheet.getSheets()[0];
+    sheet.appendRow(["Date", "Temperature", "Humidity"]);
+
+    // Aplicar negrita a los encabezados
+    var headerRange = sheet.getRange("A1:C1");
+    headerRange.setFontWeight("bold");
+  }
+
+  // Obtener la primera hoja del archivo
+  var sheet = spreadsheet.getSheets()[0];
+  var data = JSON.parse(e.postData.contents);
+  var date = new Date();
+  var temperature = data.temperature;
+  var humidity = data.humidity;
+  sheet.appendRow([date, temperature, humidity]);
+  return ContentService.createTextOutput('Success');
+}
