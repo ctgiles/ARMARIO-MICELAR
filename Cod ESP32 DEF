@@ -1,0 +1,117 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <DHT.h>
+
+//Credenciales de la red wifi
+#define NETWORK "Abcdefg"
+#define PASSWORD "gatitosperritos123"
+//Credenciales Scripts Google -> mirar si es la URL del Script
+const char *scriptURL = "https://script.google.com/macros/s/AKfycbwHjwAijD2Fn_f5dcBGuIaIlwas43f5GNeKyvXtp0QA60197wQIWmUChn9XOgJH_0QA/exec";
+
+
+//Variables de temperatura y humedad
+float Tactual1;
+float Hactual1;
+float Tactual2;
+float Hactual2;
+float Tactual;
+float Hactual;
+float Tobjetivo;
+float Hobjetivo;
+
+//Variables de tiempo
+unsigned long ultimoEnvio = 0;  //Blynk
+unsigned long ultimaRecepcion = 0;  //Arduino
+unsigned long intervaloEnvio = 1000;  //Blynk y Arduino
+//Drive
+unsigned long ultimoEnvioDrive = 0;
+unsigned long intervaloEnvioDrive = 5000;
+//WiFi
+unsigned long ultimaReconexion = 0;
+unsigned long intervaloReconexion = 10000;
+//Cambio Valores
+unsigned long dutyCycle=15000;
+
+//==============================FUNCIONES==========================================================
+
+//Función de cambio de valores
+void CambioValores(){
+  if((millis()%dutyCycle>0) && (millis()%dutyCycle<5000)){
+    Tactual1 = 15;
+    Hactual1 = 70;
+    Tactual2 = 12;
+    Hactual2 = 90;
+  }
+  else if((millis()%dutyCycle>5000) && (millis()%dutyCycle<10000)){
+    Tactual1 = 40;
+    Hactual1 = 60;
+    Tactual2 = 50;
+    Hactual2 = 75;
+  }
+  else if((millis()%dutyCycle>10000) && (millis()%dutyCycle<15000)){
+    Tactual1 = 20;
+    Hactual1 = 75;
+    Tactual2 = 24;
+    Hactual2 = 81;
+  }
+}
+
+
+//------------------------------RECONEXIÓN A WIFI--------------------------------------------------
+void reconnectWiFi(){
+  if ((millis() - ultimaReconexion)>intervaloReconexion) {
+    WiFi.begin(NETWORK, PASSWORD);
+    delay(500);
+    ultimaReconexion = millis();
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//-----------------------------------ENVIO MEDIDAS DRIVE-------------------------------------------
+void SendToDataLogger(){
+  if((millis()-ultimoEnvioDrive) > intervaloEnvioDrive){
+    if(WiFi.status() == WL_CONNECTED){
+      HTTPClient http;
+      http.begin(scriptURL);
+      http.addHeader("Content-Type","application/json");
+      String jsonData = String("{\"T1\":") + Tactual1 + ",\"H1\":" + Hactual1 + ",\"T2\":" + Tactual2 + ",\"H2\":" + Hactual2 + ",\"T\":" + Tactual + ",\"H\":" + Hactual + "}";
+      int httpResponseCode = http.POST(jsonData);
+      if(httpResponseCode > 0){
+        String response = http.getString();
+        Serial.println("Successfully Sent ^_^\n");
+      }
+      else Serial.println("Error in sending data");
+      http.end();
+    }
+    else Serial.println("WiFi Disconnected");
+
+    ultimoEnvioDrive = millis();
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+void setup(){
+  Serial.begin(115200);
+
+  //Conexión a WiFi
+  WiFi.begin(NETWORK, PASSWORD);
+  while (WiFi.status()!=WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+  }
+}
+
+void loop(){
+  Tactual = (Tactual1+Tactual2)/2;
+  Hactual = (Hactual1+Hactual2)/2;
+
+  //Verificación de conexión
+  if (WiFi.status() != WL_CONNECTED) reconnectWiFi();
+
+  CambioValores();
+  SendToDataLogger();
+}
+
+
+
+
