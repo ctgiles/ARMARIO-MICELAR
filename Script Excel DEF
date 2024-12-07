@@ -1,0 +1,41 @@
+function doPost(e){
+  //Nombre de la hoja de cálculo
+  var spreadsheetName = "Medidas Sensores";
+
+  // Buscar si ya existe la hoja de cálculo
+  var files = DriveApp.getFilesByName(spreadsheetName);
+  var spreadsheet;
+
+  // Si existe, abrirla. Si no, crear una nueva.
+  if (files.hasNext()) {
+    spreadsheet = SpreadsheetApp.open(files.next());
+  }
+  else {
+    spreadsheet = SpreadsheetApp.create(spreadsheetName);
+    // Obtener la primera hoja y agregar encabezados
+    var sheet = spreadsheet.getSheets()[0];
+    sheet.appendRow(["Date", "Temp 1", "Hum 1", "Temp 2", "Hum 2", "Temp Total", "Hum Total"]);
+
+    // Aplicar formato a los encabezados
+    var headerRange = sheet.getRange("A1");
+    headerRange.setFontWeight("bold"); // Negrita
+    var headerRange = sheet.getRange("F1:G1");
+    headerRange.setFontWeight("bold"); // Negrita
+    var headerRange = sheet.getRange("A1:G1");
+    headerRange.setBackground("#a8d08d"); // Fondo verde (hexadecimal)
+  }
+
+  // Obtener la primera hoja del archivo
+  var sheet = spreadsheet.getSheets()[0];
+  var data = JSON.parse(e.postData.contents);
+  var date = new Date();
+  var Temp1 = data.T1;
+  var Hum1 = data.H1;
+  var Temp2 = data.T2;
+  var Hum2 = data.H2;
+  var Temp = data.T;
+  var Hum = data.H;
+  sheet.appendRow([date, Temp1, Hum1, Temp2, Hum2, Temp, Hum]);
+
+  return ContentService.createTextOutput('Success');
+}
