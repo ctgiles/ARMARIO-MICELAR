@@ -79,6 +79,8 @@ void LecturaDatosArduino(){
   serialEvent();
   delay(1);
   if(stringComplete){
+    float temp, hum;
+
     int pos1 = inputString.indexOf('_');
     Tactual1 = inputString.substring(0, pos1).toFloat();
 
@@ -98,9 +100,11 @@ void LecturaDatosArduino(){
     Hactual = inputString.substring(pos5 + 1, pos6).toFloat();
 
     int pos7 = inputString.indexOf('_', pos6 + 1);
-    Tobjetivo = inputString.substring(pos6 + 1, pos7).toFloat();
+    temp = inputString.substring(pos6 + 1, pos7).toFloat();
+    if(temp != 0.0) Tobjetivo = temp;
 
-    Hobjetivo = inputString.substring(pos7 + 1, inputString.length() - 1).toFloat();
+    hum = inputString.substring(pos7 + 1, inputString.length() - 1).toFloat();
+    if(hum != 0.0) Hobjetivo = hum;
 
     inputString = "";
     stringComplete = false;
@@ -140,18 +144,22 @@ void EnvioDatosBlynk(){
 //FUNCIONES PARA RECIBIR DATOS DE BLYNK
 BLYNK_WRITE(V6){    //Temperatura Deseada
   float temp = param.asFloat();
-  Tobjetivo = temp;
-  Serial.print("Nueva temperatura deseada: ");
-  Serial.print(Tobjetivo);
-  Serial.println(" ºC");
+  if(temp != 0.0){
+    Tobjetivo = temp;
+    Serial.print("Nueva temperatura deseada: ");
+    Serial.print(Tobjetivo);
+    Serial.println(" ºC");
+  }
 }
 
 BLYNK_WRITE(V7){    //Humedad Deseada
   float hum = param.asFloat();
-  Hobjetivo = hum;
-  Serial.print("Nueva humedad deseada: ");
-  Serial.print(Hobjetivo);
-  Serial.println(" %");
+  if(hum != 0.0){
+    Hobjetivo = hum;
+    Serial.print("Nueva humedad deseada: ");
+    Serial.print(Hobjetivo);
+    Serial.println(" %");
+  }
 }
 //-------------------------------------------------------------------------------------------------
 
