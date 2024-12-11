@@ -1,0 +1,297 @@
+
+//Bibliotecas necesarias
+#include <SD.h>      //Biblioteca necesaria para Tarjeta SD
+#include <RTClib.h>  //Bibliotecas necesarias para Módulo RTC
+
+//Variables para Tarjeta SD
+File myFile;
+RTC_DS1307 rtc;
+DateTime now;
+
+//Variables de temperatura y humedad
+volatile float Tactual1;
+volatile float Hactual1;
+volatile float Tactual2;
+volatile float Hactual2;
+volatile float Tactual;
+volatile float Hactual;
+volatile float Tobjetivo = 24;
+volatile float Hobjetivo = 80;
+float umbralTemp = 5;
+float umbralHum = 5;
+
+//Variables de tiempo 
+unsigned long ultimoEnvioSD = 0;
+unsigned long ultimoEnvioESP = 0;
+unsigned long dutyCycle=30000;
+
+//Variables de recepcion de datos
+String inputString="";
+bool stringComplete=false;
+
+//Macros
+#define medidaSize 210        //NO CAMBIAR. Tamaño (caracteres) de escritura exacta de una medida
+#define maxBuffSize 100000    //Cambiar al tamaño que se quiera. Ahora almacena aprox 476 medidas
+#define intervaloEnvio 10000  //Cambiar al intervalo que se quiera
+
+//Puertos Necesarios
+//Lector Tarjeta SD
+#define CS 53   //X defecto es 4. Lo cambiamos x comodidad
+//Módulo de Refrigeración
+#define VENTILADOR5 28  //Relay control encendido ventiladores
+#define PELTIER1 29     //Relay control peltier modo frio
+#define PELTIER2 30     //Relay control peltier modo calor
+
+
+//==============================FUNCIONES==========================================================
+
+//Función de cambio de valores
+void CambioValores(){
+  if((millis()%dutyCycle>0) && (millis()%dutyCycle<10000)){
+    Tactual1 = 15;
+    Hactual1 = 70;
+    Tactual2 = 12;
+    Hactual2 = 90;
+  }
+  else if((millis()%dutyCycle>10000) && (millis()%dutyCycle<20000)){
+    Tactual1 = 40;
+    Hactual1 = 60;
+    Tactual2 = 50;
+    Hactual2 = 75;
+  }
+  else if((millis()%dutyCycle>20000) && (millis()%dutyCycle<30000)){
+    Tactual1 = 20;
+    Hactual1 = 75;
+    Tactual2 = 24;
+    Hactual2 = 81;
+  }
+}
+
+//------------------------------FUNCIONES TARJETA SD-----------------------------------------------
+//Función para almacenar fecha y hora en un string
+String obtenerFechaHora(DateTime t) {
+  String fechaHora = "";
+  fechaHora += t.day();
+  fechaHora += '/';
+  fechaHora += t.month();
+  fechaHora += '/';
+  fechaHora += t.year();
+  fechaHora += " - ";
+  fechaHora += t.hour();
+  fechaHora += ':';
+  if (t.minute() < 10) fechaHora += '0';  // Añadir un 0 si el minuto es menor a 10
+  fechaHora += t.minute();
+  fechaHora += ':';
+  if (t.second() < 10) fechaHora += '0';  // Añadir un 0 si el segundo es menor a 10
+  fechaHora += t.second();
+  return fechaHora;
+}
+
+//Función para almacenar lectura de los sensores en un string
+String obtenerDatosSensoresSD(){
+  String datos = "";
+  datos += "Datos sensor arriba:  TEMPERATURA - ";
+  if (Tactual1<10) datos+='0';
+  datos += String(Tactual1,2);
+  datos += "ºC   HUMEDAD - ";
+  if (Hactual1<10) datos+='0';
+  datos += String(Hactual1,2);
+  datos += "%\n";
+  datos += "Datos sensor abajo:  TEMPERATURA - ";
+  if (Tactual2<10) datos+='0';
+  datos += String(Tactual2, 2);
+  datos += "ºC   HUMEDAD - ";
+  if (Hactual2<10) datos+='0';
+  datos += String(Hactual2, 2);
+  datos += "%\n";
+  datos += "Datos armario:  TEMPERATURA - ";
+  if (Tactual<10) datos+='0';
+  datos += String(Tactual, 2);
+  datos += "ºC   HUMEDAD - ";
+  if (Hactual<10) datos+='0';
+  datos += String(Hactual, 2);
+  datos += "%\n";
+  return datos;
+}
+
+//Función para borrar primera medida de la tarjeta SD si no cabe 
+void recortarArchivo(const char* nombreArchivo){  //para pasarle el archivo original
+//LECTURA CONTENIDO FICHERO A PARTIR DE LA 2ª MEDIDA
+  File archivo=SD.open(nombreArchivo, FILE_READ);
+  if(!archivo){
+    Serial.print("Error al abrir el archivo para recortar");
+    return;
+  }
+  archivo.seek(medidaSize);  //Desplazar cursor al ppo de 2ª medida
+  String newArchivo="";      //Variable almacenamiento fichero desde ppo 2ª medida
+  while(archivo.available()) newArchivo+=(char)archivo.read(); //Almacenar contenido fichero
+  archivo.close();
+
+  //ESCRITURA CONTENIDO FICHERO A PARTIR DE LA 2ª MEDIDA
+  SD.remove(nombreArchivo);  //Borramos el contenido del fichero para no sobreescribir erroneamente
+  archivo=SD.open(nombreArchivo, FILE_WRITE);
+  archivo.print(newArchivo); //Sobreescribimos el contenido del fichero
+  archivo.close();
+
+  Serial.println("Archivo recortado exitosamente");
+}
+
+void EnvioTarjetaSD(){
+  if((millis()- ultimoEnvioSD)>intervaloEnvio){
+    now = rtc.now();
+    myFile = SD.open("archivo.txt", FILE_WRITE); //Abrir archivo de toma de datos en modo escritura
+    if (myFile) {
+      Serial.println("Escribiendo datos sensores en SD");  //Mientras haya espacio en la tarjeta SD
+      myFile.println(obtenerFechaHora(now));
+      myFile.println(obtenerDatosSensoresSD());
+      Serial.println(obtenerFechaHora(now));
+      Serial.println(obtenerDatosSensoresSD());
+      ultimoEnvioSD = millis();
+      myFile.close();
+
+      //Comprobamos tamaño del archivo y recortamos si necesario
+      if (SD.open("archivo.txt").size() > maxBuffSize) recortarArchivo("archivo.txt");
+    }
+    else Serial.println("Error al escribir datos de los sensores en la tarjeta SD");
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES ESP32----------------------------------------------------
+//Función para almacenar lectura de los sensores en un string
+String obtenerDatosSensoresESP(){
+  String datos="";
+  datos+=Tactual1;
+  datos+='_';
+  datos+=Hactual1;
+  datos+='_';
+  datos+=Tactual2;
+  datos+='_';
+  datos+=Hactual2;
+  datos+='_';
+  datos+=Tactual;
+  datos+='_';
+  datos+=Hactual;
+  datos+='_';
+  datos+=Tobjetivo;
+  datos+='_';
+  datos+=Hobjetivo;
+  datos+='-';
+  return datos;
+}
+
+//Función para avisar que se reciben datos por el Serial1
+void serialEvent() {
+  while (Serial1.available()) {          //.available()=true si hay datos en el buffer de recepción
+    char inChar = (char)Serial1.read();  //lee el primer caracter en el buffer y lo guarda en char
+    inputString += inChar;               //almacena cada caracter en un string
+    if (inChar == '-') stringComplete = true;  //'-' = char que indica fin de cadena en el buffer
+  }   //se pasa al siguiente elemento del buffer y se vuelve a evaluar el while
+}
+
+void EnvioDatosESP(){
+  if ((millis() - ultimoEnvioESP) > intervaloEnvio) {
+    Serial.println(obtenerDatosSensoresESP());
+    Serial1.println(obtenerDatosSensoresESP());
+    ultimoEnvioESP = millis();
+  }
+}
+
+void LecturaDatosESP() {
+  serialEvent();
+  if (stringComplete) {
+    Serial.print("Datos recibidos del ESP:");
+    Serial.println(inputString);
+
+    int pos1 = inputString.indexOf('_');
+    Tobjetivo = inputString.substring(0, pos1).toFloat();
+    Serial.print("Temperatura Objetivo:");
+    Serial.print(Tobjetivo);
+    Serial.println(" ºC");
+
+    Hobjetivo = inputString.substring(pos1 + 1, (inputString.length() - 1)).toFloat();
+    Serial.print("Humedad Objetivo:");
+    Serial.print(Hobjetivo);
+    Serial.println(" ºC");
+
+    inputString = "";
+    stringComplete = false;
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES MÓDULO REFRIGERACIÓN-------------------------------------
+
+void ActuadorTemperatura(){
+  //MODO FRIO - CALEFACTOR
+  if(Tactual < (Tobjetivo - umbralTemp)){          //cambiar rango si es demasiado fuerte
+    digitalWrite(PELTIER2, LOW);     //aseguramos apagado control modo calor
+    digitalWrite(PELTIER1, HIGH);    //encendemos control modo frio
+    digitalWrite(VENTILADOR5, HIGH); //modo frio o calor, ventiladores activados
+    //Serial.println("Modo calefactor");
+  }
+  //MODO CALOR - AIRE ACONDICIONADO
+  else if(Tactual > (Tobjetivo + umbralTemp)){
+    //digitalWrite(VENTILADOR5, HIGH);
+    digitalWrite(PELTIER1, LOW);
+    digitalWrite(PELTIER2, HIGH);
+    digitalWrite(VENTILADOR5, HIGH);
+    //Serial.println("Modo aire acondicionado");
+  }
+  //MODO OFF
+  else{
+    //digitalWrite(VENTILADOR5, LOW);
+    digitalWrite(PELTIER1, LOW);
+    digitalWrite(PELTIER2, LOW);
+    digitalWrite(VENTILADOR5, LOW);
+    //Serial.println("Modo OFF");
+  }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void setup(){
+  //Inicialización
+  Serial.begin(115200);
+  Serial1.begin(115200);
+  pinMode(VENTILADOR5, OUTPUT);
+  pinMode(PELTIER1, OUTPUT);
+  pinMode(PELTIER2,OUTPUT);
+
+  //Inicialización tarjeta SD
+  Serial.println("Iniciando SD");
+  if (!SD.begin(CS)) {  //Comprueba que esté conectado el CSPIN
+    Serial.println("No se pudo inicializar la tarjeta SD");
+    return;
+  }
+  else Serial.println("Inicializacion tarjeta SD exitosa ");
+
+  //Inicialización módulo RTC
+  if (!rtc.begin()) {
+    Serial.println("No se puede encontrar RTC");
+    while (1); //es necesario que conecte
+  }
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Ajusta el RTC con la hora de compilación
+  now = rtc.now();
+  Serial.println(obtenerFechaHora(now));
+
+  //INICIALIZACIÓN CONEXIÓN ESP32
+  if (!Serial1.available()) {
+    Serial.println("No se pudo conectar con el ESP32");
+    return;
+  }
+  else Serial.println("Conexion con ESP32 exitosa");
+}
+
+
+
+void loop(){
+  Tactual = (Tactual1+Tactual2)/2;
+  Hactual = (Hactual1+Hactual2)/2;
+
+  CambioValores();
+  EnvioTarjetaSD();
+  EnvioDatosESP();
+  LecturaDatosESP();
+  ActuadorTemperatura();
+}
