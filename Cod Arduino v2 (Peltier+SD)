@@ -15,8 +15,8 @@ volatile float Tactual2;
 volatile float Hactual2;
 volatile float Tactual;
 volatile float Hactual;
-volatile float Tobjetivo;
-volatile float Hobjetivo;
+volatile float Tobjetivo = 24;
+volatile float Hobjetivo = 80;
 float umbralTemp = 5;
 float umbralHum = 5;
 
