@@ -281,10 +281,6 @@ void setup(){
     return;
   }
   else Serial.println("Conexion con ESP32 exitosa");
-
-  //Valores
-  Tobjetivo = 22;
-  Hobjetivo = 85;
 }
 
 
