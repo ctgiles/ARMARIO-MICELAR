@@ -1,4 +1,3 @@
-
 //Bibliotecas necesarias
 #include <SD.h>      //Biblioteca necesaria para Tarjeta SD
 #include <RTClib.h>  //Bibliotecas necesarias para Módulo RTC
