@@ -1,15 +1,16 @@
-//Variable de tiempo de ciclo
-unsigned long dutyCycle=9000;
+//Variables de Ciclo
+unsigned long ultMedida = Cycle/6;
+unsigned long intervMedida = Cycle/3;
 
 //Función de cambio de valores
 void CambioValores(){
-  if((millis()%dutyCycle>0) && (millis()%dutyCycle<3000)){
+  if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
     //Valores primeros 3s
   }
-  else if((millis()%dutyCycle>3000) && (millis()%dutyCycle<6000)){
+  else if((millis()%Cycle>Duty) && (millis()%Cycle<(2*Duty))){
     //Valores segundos 3s
   }
-  else if((millis()%dutyCycle>6000) && (millis()%dutyCycle<9000)){
+  else if((millis()%Cycle>(2*Duty)) && (millis()%Cycle<Cycle)){
     //Valores terceros 3s
   }
 }
