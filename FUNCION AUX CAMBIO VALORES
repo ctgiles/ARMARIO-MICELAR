@@ -1,6 +1,6 @@
 //Variables de Ciclo
-unsigned long ultMedida = Cycle/6;
-unsigned long intervMedida = Cycle/3;
+unsigned long Cycle=30000;
+unsigned long Duty = Cycle/3;
 
 //Función de cambio de valores
 void CambioValores(){
