@@ -22,7 +22,9 @@ float umbralHum = 5;
 
 //Variables de tiempo 
 unsigned long ultimoEnvioSD = 0;
+unsigned long intervaloEnvioSD = 60000;
 unsigned long ultimoEnvioESP = 0;
+unsigned long intervaloEnvioESP = 10000;
 unsigned long dutyCycle=30000;
 
 //Variables de recepcion de datos
@@ -32,7 +34,6 @@ bool stringComplete=false;
 //Macros
 #define medidaSize 210        //NO CAMBIAR. Tamaño (caracteres) de escritura exacta de una medida
 #define maxBuffSize 100000    //Cambiar al tamaño que se quiera. Ahora almacena aprox 476 medidas
-#define intervaloEnvio 10000  //Cambiar al intervalo que se quiera
 
 //Puertos Necesarios
 //Lector Tarjeta SD
@@ -137,7 +138,7 @@ void recortarArchivo(const char* nombreArchivo){  //para pasarle el archivo orig
 }
 
 void EnvioTarjetaSD(){
-  if((millis()- ultimoEnvioSD)>intervaloEnvio){
+  if((millis()- ultimoEnvioSD)>intervaloEnvioSD){
     now = rtc.now();
     myFile = SD.open("archivo.txt", FILE_WRITE); //Abrir archivo de toma de datos en modo escritura
     if (myFile) {
@@ -190,7 +191,7 @@ void serialEvent() {
 }
 
 void EnvioDatosESP(){
-  if ((millis() - ultimoEnvioESP) > intervaloEnvio) {
+  if ((millis() - ultimoEnvioESP) > intervaloEnvioESP) {
     Serial.println(obtenerDatosSensoresESP());
     Serial1.println(obtenerDatosSensoresESP());
     ultimoEnvioESP = millis();
