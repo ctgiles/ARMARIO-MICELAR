@@ -1,0 +1,105 @@
+//Equivalencia de Pines
+#define HUMIDIFICADOR1 23  //Actuador humedad (parte superior armario)
+#define HUMIDIFICADOR2 22  //Actuador humedad (parte inferior armario)
+
+//Variables Temp/Hum
+volatile float Tactual1;
+volatile float Hactual1;
+volatile float Tactual2;
+volatile float Hactual2;
+volatile float Tactual;
+volatile float Hactual;
+volatile float Tobjetivo = 24;
+volatile float Hobjetivo = 73;
+
+//Variable de tiempo de ciclo
+unsigned long Cycle=50000;
+unsigned long Duty = Cycle/5;
+
+//Variables de Ciclo
+unsigned long ultMedida = 0.05*Cycle;
+unsigned long intervMedida = Cycle/5;
+
+//Función de cambio de valores
+void CambioValores(){
+  if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+    Hactual1 = 80;
+    Hactual2 = 90;   //Hactual = 85
+  }
+  else if((millis()%Cycle>Duty) && (millis()%Cycle<(2*Duty))){
+    Hactual1 = 66;
+    Hactual2 = 78;   //Hactual = 72
+  }
+  else if((millis()%Cycle>(2*Duty)) && (millis()%Cycle<(3*Duty))){
+    Hactual1 = 80;
+    Hactual2 = 78;   //Hactual = 79
+  }
+  else if((millis()%Cycle>(3*Duty)) && (millis()%Cycle<(4*Duty))){
+    Hactual1 = 78;
+    Hactual2 = 66;   //Hactual = 72
+  }
+  else if((millis()%Cycle>(4*Duty)) && (millis()%Cycle<Cycle)){
+    Hactual1 = 60;
+    Hactual2 = 66;   //Hactual = 63   
+  }
+
+}
+
+void ImprimirValores(){
+  if(millis()-ultMedida > intervMedida){
+    // Serial.print("T_sup: ");
+    // Serial.print(Tactual1);
+    // Serial.print("ºc  -  T_inf: ");
+    // Serial.print(Tactual2);
+    // Serial.print("ºc  -  TEMPERATURA: ");
+    // Serial.print(Tactual);
+    // Serial.println("ºc");
+    Serial.print("H_sup: ");
+    Serial.print(Hactual1);
+    Serial.print("%  -  H_inf: ");
+    Serial.print(Hactual2);
+    Serial.print("%  -  HUMEDAD: ");
+    Serial.print(Hactual);
+    Serial.println("%");
+    // Serial.print("T_objetivo: ");
+    // Serial.print(Tobjetivo);
+    // Serial.print("ºc  -");
+    Serial.print("H_objetivo: ");
+    Serial.print(Hobjetivo);
+    Serial.println("%");
+    Serial.println();
+    ultMedida = millis();
+  }
+}
+
+void ActuadorHumedad(){
+  //Control Humidificador Superior
+  if ((Hactual1 < (Hobjetivo - 5)) || (Hactual < (Hobjetivo - 3)))
+    digitalWrite(HUMIDIFICADOR1, HIGH);
+  else if ((Hactual1 > (Hobjetivo + 5)) && (Hactual > (Hobjetivo + 2)))
+    digitalWrite(HUMIDIFICADOR1, LOW);
+
+  //Control Humidificador Inferior
+  if ((Hactual2 < (Hobjetivo - 5)) || (Hactual < (Hobjetivo - 3)))
+    digitalWrite(HUMIDIFICADOR2, HIGH);
+  else if ((Hactual2 > (Hobjetivo + 5)) && (Hactual > (Hobjetivo + 2)))
+    digitalWrite(HUMIDIFICADOR2, LOW);
+}
+
+void setup(){
+  Serial.begin(115200);
+  Serial.println("OU LLEA  ^_^");
+  Serial.println();
+
+  pinMode(HUMIDIFICADOR1, OUTPUT);
+  pinMode(HUMIDIFICADOR2, OUTPUT);
+}
+
+void loop(){
+  Tactual = (Tactual1+Tactual2)/2;
+  Hactual = (Hactual1+Hactual2)/2;
+
+  CambioValores();
+  ImprimirValores();
+  ActuadorHumedad();
+}
