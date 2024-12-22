@@ -1,0 +1,82 @@
+#include <RTClib.h>  //Bibliotecas necesarias para Módulo RTC
+
+//Variables de temperatura y humedad
+float Tactual1;
+float Hactual1;
+float Tactual2;
+float Hactual2;
+float Tactual;
+float Hactual;
+float Tobjetivo = 24;
+float Hobjetivo = 80;
+
+//Variables de control
+bool ActTemp = false;
+bool ActHum = false;
+
+//Variables de fecha y hora
+RTC_DS1307 rtc;
+DateTime control;
+int intervaloActivacion = 15;
+
+//Equivalencia de pines
+#define VENTILADOR1 4     //Actuador temperatura alta
+#define VENTILADOR2 5     //Actuador temperatura alta
+#define VENTILADOR3 6     //Actuador temperatura alta
+#define VENTILADOR4 7     //Actuador temperatura alta
+
+
+bool ControlPorTiempo(){
+  control = rtc.now();
+  if (control.minute()>0 && control.minute()<intervaloActivacion) return true;
+  return false;
+}
+
+void ActuadorVentilacion() {
+  if(ActTemp || ActHum){
+    analogWrite(VENTILADOR1,255);
+    analogWrite(VENTILADOR2,255);
+    analogWrite(VENTILADOR3,255);
+    analogWrite(VENTILADOR4,255);
+  }
+
+  else if(ControlPorTiempo()){
+    analogWrite(VENTILADOR1,100);
+    analogWrite(VENTILADOR2,100);
+    analogWrite(VENTILADOR3,100);
+    analogWrite(VENTILADOR4,100);
+  }
+
+  else if(!ActTemp && !ActHum){
+    analogWrite(VENTILADOR1,0);
+    analogWrite(VENTILADOR2,0);
+    analogWrite(VENTILADOR3,0);
+    analogWrite(VENTILADOR4,0);
+  }
+
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Iniciando sistema...");
+
+  //Inicialización de pines
+  pinMode(VENTILADOR1, OUTPUT);
+  pinMode(VENTILADOR2, OUTPUT);
+  pinMode(VENTILADOR3, OUTPUT);
+  pinMode(VENTILADOR4, OUTPUT);
+
+  //Inicialización módulo RTC
+  if (!rtc.begin()) {
+    Serial.println("No se puede encontrar RTC");
+    while (1); //es necesario que conecte
+  }
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Ajusta el RTC con la hora de compilación
+  //now = rtc.now();
+  //Serial.println(obtenerFechaHora(now));
+
+}
+
+void loop() {
+  ActuadorVentilacion();
+}
