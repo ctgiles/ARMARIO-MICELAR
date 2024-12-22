@@ -33,8 +33,8 @@ float Tactual2;
 float Hactual2;
 float Tactual;
 float Hactual;
-float Tobjetivo;
-float Hobjetivo;
+float Tobjetivo = 24;
+float Hobjetivo = 80;
 
 //Variables de tiempo
 unsigned long ultimoEnvio = 0;  //Blynk
