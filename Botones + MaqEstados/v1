@@ -26,7 +26,7 @@ volatile float Hobjetivo = 80;
 
 //Variables Maquina de Estados
 volatile int Estado = 0;
-unsigned long Cycle = 20000;
+unsigned long Cycle = 10000;
 unsigned long Duty = Cycle/2;
 int cont = 0;
 
@@ -84,7 +84,7 @@ void CambioValoresHumedad(){
 
 
 void botonOK_pulsado(GFButton& btn){
-  if(Estado ==2 || Estado == 3){
+  if(Estado == 3 || Estado == 4){
     Estado = 1;
     cont = 0;
     Serial.println("Vuelta al Estado 1");
@@ -92,34 +92,34 @@ void botonOK_pulsado(GFButton& btn){
 }
 
 void botonT1_pulsado(GFButton& btn){
-  if(Estado == 1){
-    Estado = 2;
+  if(Estado == 1 || Estado == 2){
+    Estado = 3;
     cont = 0;
-    Serial.println("Estado 2: Cambio Temperatura");
+    Serial.println("Estado 3: Cambio Temperatura");
   }
 }
 
 void botonT2_pulsado(GFButton& btn){
-  if(Estado == 1){
-    Estado = 2;
+  if(Estado == 1 || Estado == 2){
+    Estado = 3;
     cont = 0;
-    Serial.println("Estado 2: Cambio Temperatura");
+    Serial.println("Estado 3: Cambio Temperatura");
   }
 }
 
 void botonH1_pulsado(GFButton& btn){
-  if(Estado == 1){
-    Estado = 3;
+  if(Estado == 1 || Estado == 2){
+    Estado = 4;
     cont = 0;
-    Serial.println("Estado 3: Cambio Humedad");
+    Serial.println("Estado 4: Cambio Humedad");
   }
 }
 
 void botonH2_pulsado(GFButton& btn){
-  if(Estado == 1){
-    Estado = 3;
+  if(Estado == 1 || Estado == 2){
+    Estado = 4;
     cont = 0;
-    Serial.println("Estado 3: Cambio Humedad");
+    Serial.println("Estado 4: Cambio Humedad");
   }
 }
 
@@ -135,7 +135,7 @@ void MaquinaDeEstados(){
       break;
 
     case 1:
-      if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+      if(cont == 0){
         Serial.println("DATOS ACTUALES:");
         Serial.print("T: ");
         Serial.print(Tactual);
@@ -148,8 +148,17 @@ void MaquinaDeEstados(){
         Serial.print("ºc    H: ");
         Serial.print(Hobjetivo);
         Serial.println("%");
+        Serial.println();
+        cont++;
       }
-      else if((millis()%Cycle>Duty) && (millis()%Cycle<(2*Duty))){
+      if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+        Estado = 2;
+        cont = 0;
+      }
+      break;
+
+    case 2:
+      if(cont == 0){
         Serial.println("DATOS SENSOR SUPERIOR:");
         Serial.print("T: ");
         Serial.print(Tactual1);
@@ -162,27 +171,35 @@ void MaquinaDeEstados(){
         Serial.print("ºc    H: ");
         Serial.print(Hactual2);
         Serial.println("%");
+        Serial.println();
+        cont++;
+      }
+      if((millis()%Cycle>Duty) && (millis()%Cycle<Cycle)){
+        Estado = 1;
+        cont = 0;
       }
       break;
 
-    case 2:
+    case 3:
       if(cont == 0){
         Serial.println("Fijar nueva Temperatura Obejetivo en: ");
         Serial.print("    ");
         Serial.print(Tobjetivo);
         Serial.println("ºc");
         Serial.println("Pulse OK para aceptar.");
+        Serial.println();
         cont++;
       }
       break;
 
-    case 3:
+    case 4:
       if(cont == 0){
         Serial.println("Fijar nueva Humedad Obejetivo en: ");
         Serial.print("    ");
         Serial.print(Hobjetivo);
         Serial.println("%");
         Serial.println("Pulse OK para aceptar.");
+        Serial.println();
         cont++;
       }
       break;
