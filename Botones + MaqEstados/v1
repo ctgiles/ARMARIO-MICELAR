@@ -1,0 +1,225 @@
+#include <LiquidCrystal_I2C.h>  //Librería necesaria para pantalla LCD
+#include <Wire.h>               //Librería necesaria para pantalla LCD I2C
+#include "GFButton.h"           //Librería necesaria para evitar rebotes al pulsar los botones
+
+#define PULSADOROK 43  //Pulsador Aceptar
+#define PULSADORT1 44  //Pulsador Temperatura ++
+#define PULSADORT2 45  //Pulsador Temperatura --
+#define PULSADORH1 46  //Pulsador Humedad ++
+#define PULSADORH2 47  //Pulsador Humedad --
+
+GFButton botonOK(PULSADOROK);
+GFButton botonT1(PULSADORT1);
+GFButton botonT2(PULSADORT2);
+GFButton botonH1(PULSADORH1);
+GFButton botonH2(PULSADORH2);
+
+//Variables de temperatura y humedad
+volatile float Tactual1;
+volatile float Hactual1;
+volatile float Tactual2;
+volatile float Hactual2;
+volatile float Tactual;
+volatile float Hactual;
+volatile float Tobjetivo = 24;
+volatile float Hobjetivo = 80;
+
+//Variables Maquina de Estados
+volatile int Estado = 0;
+unsigned long Cycle = 20000;
+unsigned long Duty = Cycle/2;
+int cont = 0;
+
+//Variables Banco de Pruebas
+unsigned long HumCycle=50000;
+unsigned long HumDuty = HumCycle/5;
+unsigned long TempCycle=30000;
+unsigned long TempDuty = TempCycle/3;
+
+//------------------------------FUNCIONES BANCO DE PRUEBAS-----------------------------------------
+void CambioValoresTemperatura(){
+  unsigned long Cycle = TempCycle;
+  unsigned long Duty = TempDuty;
+
+  if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+    Tactual1 = 15;
+    Tactual2 = 12;   //Tactual = 13.5
+  }
+  else if((millis()%Cycle>Duty) && (millis()%Cycle<(2*Duty))){
+    Tactual1 = 40;
+    Tactual2 = 50;   //Tactual = 45
+  }
+  else if((millis()%Cycle>(2*Duty)) && (millis()%Cycle<Cycle)){
+    Tactual1 = 20;
+    Tactual2 = 24;   //Tactual = 22
+  }
+}
+
+void CambioValoresHumedad(){
+  unsigned long Cycle = HumCycle;
+  unsigned long Duty = HumDuty;
+
+  if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+    Hactual1 = 80;
+    Hactual2 = 90;   //Hactual = 85
+  }
+  else if((millis()%Cycle>Duty) && (millis()%Cycle<(2*Duty))){
+    Hactual1 = 66;
+    Hactual2 = 78;   //Hactual = 72
+  }
+  else if((millis()%Cycle>(2*Duty)) && (millis()%Cycle<(3*Duty))){
+    Hactual1 = 80;
+    Hactual2 = 78;   //Hactual = 79
+  }
+  else if((millis()%Cycle>(3*Duty)) && (millis()%Cycle<(4*Duty))){
+    Hactual1 = 78;
+    Hactual2 = 66;   //Hactual = 72
+  }
+  else if((millis()%Cycle>(4*Duty)) && (millis()%Cycle<Cycle)){
+    Hactual1 = 60;
+    Hactual2 = 66;   //Hactual = 63   
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+
+void botonOK_pulsado(GFButton& btn){
+  if(Estado ==2 || Estado == 3){
+    Estado = 1;
+    cont = 0;
+    Serial.println("Vuelta al Estado 1");
+  }
+}
+
+void botonT1_pulsado(GFButton& btn){
+  if(Estado == 1){
+    Estado = 2;
+    cont = 0;
+    Serial.println("Estado 2: Cambio Temperatura");
+  }
+}
+
+void botonT2_pulsado(GFButton& btn){
+  if(Estado == 1){
+    Estado = 2;
+    cont = 0;
+    Serial.println("Estado 2: Cambio Temperatura");
+  }
+}
+
+void botonH1_pulsado(GFButton& btn){
+  if(Estado == 1){
+    Estado = 3;
+    cont = 0;
+    Serial.println("Estado 3: Cambio Humedad");
+  }
+}
+
+void botonH2_pulsado(GFButton& btn){
+  if(Estado == 1){
+    Estado = 3;
+    cont = 0;
+    Serial.println("Estado 3: Cambio Humedad");
+  }
+}
+
+void MaquinaDeEstados(){
+  switch (Estado) {
+    case 0:
+      if(cont == 0){
+        Serial.println("BIENVENIDO !!!");
+        Serial.println("    ^_^");
+        cont++;
+      }
+      if(millis()> 5000) Estado = 1;
+      break;
+
+    case 1:
+      if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+        Serial.println("DATOS ACTUALES:");
+        Serial.print("T: ");
+        Serial.print(Tactual);
+        Serial.print("ºc    H: ");
+        Serial.print(Hactual);
+        Serial.println("%");
+        Serial.println("DATOS OBJETIVO:");
+        Serial.print("T: ");
+        Serial.print(Tobjetivo);
+        Serial.print("ºc    H: ");
+        Serial.print(Hobjetivo);
+        Serial.println("%");
+      }
+      else if((millis()%Cycle>Duty) && (millis()%Cycle<(2*Duty))){
+        Serial.println("DATOS SENSOR SUPERIOR:");
+        Serial.print("T: ");
+        Serial.print(Tactual1);
+        Serial.print("ºc    H: ");
+        Serial.print(Hactual1);
+        Serial.println("%");
+        Serial.println("DATOS SENSOR INFERIOR:");
+        Serial.print("T: ");
+        Serial.print(Tactual2);
+        Serial.print("ºc    H: ");
+        Serial.print(Hactual2);
+        Serial.println("%");
+      }
+      break;
+
+    case 2:
+      if(cont == 0){
+        Serial.println("Fijar nueva Temperatura Obejetivo en: ");
+        Serial.print("    ");
+        Serial.print(Tobjetivo);
+        Serial.println("ºc");
+        Serial.println("Pulse OK para aceptar.");
+        cont++;
+      }
+      break;
+
+    case 3:
+      if(cont == 0){
+        Serial.println("Fijar nueva Humedad Obejetivo en: ");
+        Serial.print("    ");
+        Serial.print(Hobjetivo);
+        Serial.println("%");
+        Serial.println("Pulse OK para aceptar.");
+        cont++;
+      }
+      break;
+  }
+}
+
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Arrrrrancando motores !!!");
+
+  pinMode(PULSADOROK, INPUT_PULLUP);
+  pinMode(PULSADORT1, INPUT_PULLUP);
+  pinMode(PULSADORT2, INPUT_PULLUP);
+  pinMode(PULSADORH1, INPUT_PULLUP);
+  pinMode(PULSADORH2, INPUT_PULLUP);
+
+  botonOK.setPressHandler(botonOK_pulsado);
+  botonT1.setPressHandler(botonT1_pulsado);
+  botonT2.setPressHandler(botonT2_pulsado);
+  botonH1.setPressHandler(botonH1_pulsado);
+  botonH2.setPressHandler(botonH2_pulsado);
+}
+
+void loop() {
+  Tactual = (Tactual1+Tactual2)/2;
+  Hactual = (Hactual1+Hactual2)/2;
+
+  CambioValoresTemperatura();
+  CambioValoresHumedad();
+
+  MaquinaDeEstados();
+
+  botonOK.process();
+  botonT1.process();
+  botonT2.process();
+  botonH1.process();
+  botonH2.process();
+
+}
