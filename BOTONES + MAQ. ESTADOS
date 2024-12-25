@@ -94,10 +94,6 @@ void botonOK_pulsado(GFButton& btn){
     Hobjetivo = Hobj_prov;
     Estado = 1;
   }
-  // if(Estado == 3 || Estado == 4){
-  //   Estado = 1;
-  //   Serial.println("Vuelta al Estado 1");
-  // }
   msgImp = false;
 }
 
