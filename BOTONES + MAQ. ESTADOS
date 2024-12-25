@@ -147,7 +147,7 @@ void MaquinaDeEstados(){
         Serial.println("    ^_^");
         cont++;
       }
-      if(millis()> 5000) Estado = 1;
+      if(millis()> 10000) Estado = 1;
       break;
 
     case 1:
