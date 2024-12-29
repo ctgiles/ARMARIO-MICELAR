@@ -1,0 +1,246 @@
+#include "DHT.h"
+#include <Wire.h>               //Librería necesaria para pantalla LCD I2C
+#include "GFButton.h"           //Librería necesaria para evitar rebotes al pulsar los botones
+
+//PPUERTOS NECESARIOS
+//Sensores
+#define SENSOR1 38
+#define SENSOR2 39
+#define DHTTYPE DHT11   //MACRO TIPO SENSOR
+//Botones
+#define PULSADOROK 43  //Pulsador Aceptar
+#define PULSADORT1 44  //Pulsador Temperatura ++
+#define PULSADORT2 45  //Pulsador Temperatura --
+#define PULSADORH1 46  //Pulsador Humedad ++
+#define PULSADORH2 47  //Pulsador Humedad --
+
+//VARIABLES
+//Variables del sensor
+DHT dht1(SENSOR1, DHTTYPE);
+DHT dht2(SENSOR2, DHTTYPE);
+unsigned long ultLectura = 0;
+
+//Variables de temperatura y humedad
+volatile float Tactual1;
+volatile float Hactual1;
+volatile float Tactual2;
+volatile float Hactual2;
+volatile float Tactual;
+volatile float Hactual;
+volatile float Tobjetivo = 24;
+volatile float Hobjetivo = 80;
+volatile float Tobj_prov;
+volatile float Hobj_prov;
+
+//Variables Tipo Botón
+GFButton botonOK(PULSADOROK);
+GFButton botonT1(PULSADORT1);
+GFButton botonT2(PULSADORT2);
+GFButton botonH1(PULSADORH1);
+GFButton botonH2(PULSADORH2);
+
+//Variables Maquina de Estados
+volatile int Estado = 0;
+unsigned long Cycle = 10000;
+unsigned long Duty = Cycle/2;
+bool msgImp = false;
+
+//==============================FUNCIONES==========================================================
+//------------------------------FUNCIONES SENSORES-------------------------------------------------
+void LecturaSensores(){
+  if (millis() - ultLectura > 2000) {
+    Tactual1 = dht1.readTemperature();  //Temperatura [ºc] parte superior armario
+    Hactual1 = dht1.readHumidity();     //Humedad [%] parte superior armario
+
+    Tactual2 = dht2.readTemperature();  //Temperatura [ºc] parte inferior armario
+    Hactual2 = dht2.readHumidity();     //Humedad [%] parte inferior armario
+
+    Tactual = (Tactual1 + Tactual2) / 2;  //Temperatura promedio
+    Hactual = (Hactual1 + Hactual2) / 2;  //Humedad promedio
+
+    ultLectura = millis();
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES BOTONES--------------------------------------------------
+//Callbacks Pulsación Botones
+void botonOK_pulsado(GFButton& btn){
+  if(Estado == 3){
+    Tobjetivo = Tobj_prov;
+    Estado = 1;
+  }
+  else if (Estado == 4){
+    Hobjetivo = Hobj_prov;
+    Estado = 1;
+  }
+  msgImp = false;
+}
+
+void botonT1_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    Tobj_prov = Tobjetivo;
+    Estado = 3;
+  }
+  else if(Estado == 3){
+    Tobj_prov++;
+  }
+  msgImp = false;
+}
+
+void botonT2_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    Tobj_prov = Tobjetivo;
+    Estado = 3;
+  }
+  else if(Estado == 3){
+    Tobj_prov--;
+  }
+  msgImp = false;
+}
+
+void botonH1_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    Hobj_prov = Hobjetivo;
+    Estado = 4;
+  }
+  else if(Estado == 4){
+    Hobj_prov++;
+  }
+  msgImp = false;
+}
+
+void botonH2_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    Hobj_prov = Hobjetivo;
+    Estado = 4;
+  }
+  else if(Estado == 4){
+    Hobj_prov--;
+  }
+  msgImp = false;
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES MÁQUINA DE ESTADOS---------------------------------------
+void MaquinaDeEstados(){
+  switch (Estado) {
+    case 0:
+      if(!msgImp){
+        Serial.println("BIENVENIDO !!!");
+        Serial.println("    ^_^");
+        msgImp = true;
+      }
+      if(millis()> 10000) Estado = 1;
+      break;
+
+    case 1:
+      if(!msgImp){
+        Serial.println("DATOS ACTUALES:");
+        Serial.print("T: ");
+        Serial.print(Tactual);
+        Serial.print("ºc    H: ");
+        Serial.print(Hactual);
+        Serial.println("%");
+        Serial.println("DATOS OBJETIVO:");
+        Serial.print("T: ");
+        Serial.print(Tobjetivo);
+        Serial.print("ºc    H: ");
+        Serial.print(Hobjetivo);
+        Serial.println("%");
+        Serial.println();
+        msgImp = true;
+      }
+      if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+        Estado = 2;
+        msgImp = false;
+      }
+      break;
+
+    case 2:
+      if(!msgImp){
+        Serial.println("DATOS SENSOR SUPERIOR:");
+        Serial.print("T: ");
+        Serial.print(Tactual1);
+        Serial.print("ºc    H: ");
+        Serial.print(Hactual1);
+        Serial.println("%");
+        Serial.println("DATOS SENSOR INFERIOR:");
+        Serial.print("T: ");
+        Serial.print(Tactual2);
+        Serial.print("ºc    H: ");
+        Serial.print(Hactual2);
+        Serial.println("%");
+        Serial.println();
+        msgImp = true;
+      }
+      if((millis()%Cycle>Duty) && (millis()%Cycle<Cycle)){
+        Estado = 1;
+        msgImp = false;
+      }
+      break;
+
+    case 3:
+      if(!msgImp){
+        Serial.println("Fijar nueva Temperatura Objetivo en: ");
+        Serial.print("    ");
+        Serial.print(Tobj_prov);
+        Serial.println("ºc");
+        Serial.println("Pulse OK para aceptar.");
+        Serial.println();
+        msgImp = true;
+      }
+      break;
+
+    case 4:
+      if(!msgImp){
+        Serial.println("Fijar nueva Humedad Objetivo en: ");
+        Serial.print("    ");
+        Serial.print(Hobj_prov);
+        Serial.println("%");
+        Serial.println("Pulse OK para aceptar.");
+        Serial.println();
+        msgImp = true;
+      }
+      break;
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Arrrrancando Motores !!!");
+
+  //Inicialización de Pines
+  //Pines Sensores
+  pinMode(SENSOR1, INPUT_PULLUP);
+  pinMode(SENSOR2, INPUT_PULLUP);
+  //Pines Botones
+  pinMode(PULSADOROK, INPUT_PULLUP);
+  pinMode(PULSADORT1, INPUT_PULLUP);
+  pinMode(PULSADORT2, INPUT_PULLUP);
+  pinMode(PULSADORH1, INPUT_PULLUP);
+  pinMode(PULSADORH2, INPUT_PULLUP);
+
+  //Inicialización sensores
+  dht1.begin();
+  dht2.begin();
+
+  //Asignación Funciones Callback 
+  botonOK.setPressHandler(botonOK_pulsado);
+  botonT1.setPressHandler(botonT1_pulsado);
+  botonT2.setPressHandler(botonT2_pulsado);
+  botonH1.setPressHandler(botonH1_pulsado);
+  botonH2.setPressHandler(botonH2_pulsado);
+}
+
+void loop() {
+  LecturaSensores();
+  MaquinaDeEstados();
+
+  botonOK.process();
+  botonT1.process();
+  botonT2.process();
+  botonH1.process();
+  botonH2.process();
+}
