@@ -1,0 +1,292 @@
+//Bibliotecas Necesarias
+#include "DHT.h"                //Lectura sensores
+#include <LiquidCrystal_I2C.h>  //Pantalla LCD
+#include <Wire.h>               //Librería necesaria para pantalla LCD I2C
+#include "GFButton.h"           //Librería necesaria para evitar rebotes al pulsar los botones
+
+//PUERTOS NECESARIOS
+//Sensores
+#define SENSOR1 38
+#define SENSOR2 39
+#define DHTTYPE DHT11   //MACRO TIPO SENSOR
+//Botones
+#define PULSADOROK 43  //Pulsador Aceptar
+#define PULSADORT1 44  //Pulsador Temperatura ++
+#define PULSADORT2 45  //Pulsador Temperatura --
+#define PULSADORH1 46  //Pulsador Humedad ++
+#define PULSADORH2 47  //Pulsador Humedad --
+
+//VARIABLES
+//Variables del sensor
+DHT dht1(SENSOR1, DHTTYPE);
+DHT dht2(SENSOR2, DHTTYPE);
+unsigned long ultLectura = 0;
+
+//Variables de temperatura y humedad
+volatile float Tactual1;
+volatile float Hactual1;
+volatile float Tactual2;
+volatile float Hactual2;
+volatile float Tactual;
+volatile float Hactual;
+volatile float Tobjetivo = 24;
+volatile float Hobjetivo = 80;
+volatile float Tobj_prov;
+volatile float Hobj_prov;
+
+//Variables Tipo Botón
+GFButton botonOK(PULSADOROK);
+GFButton botonT1(PULSADORT1);
+GFButton botonT2(PULSADORT2);
+GFButton botonH1(PULSADORH1);
+GFButton botonH2(PULSADORH2);
+
+//Variables Maquina de Estados
+volatile int Estado = 0;
+unsigned long Cycle = 10000;
+unsigned long Duty = Cycle/2;
+
+//Variables Pantalla LCD
+unsigned long ultComprobacion = 0;
+LiquidCrystal_I2C lcd(0x27, 20, 4);  //Dir. I2C, nº caracteres x fila, nº filas
+
+
+//==============================FUNCIONES==========================================================
+//------------------------------FUNCIONES SENSORES-------------------------------------------------
+void LecturaSensores(){
+  if (millis() - ultLectura > 2000) {
+    Tactual1 = dht1.readTemperature();  //Temperatura [ºc] parte superior armario
+    Hactual1 = dht1.readHumidity();     //Humedad [%] parte superior armario
+
+    Tactual2 = dht2.readTemperature();  //Temperatura [ºc] parte inferior armario
+    Hactual2 = dht2.readHumidity();     //Humedad [%] parte inferior armario
+
+    Tactual = (Tactual1 + Tactual2) / 2;  //Temperatura promedio
+    Hactual = (Hactual1 + Hactual2) / 2;  //Humedad promedio
+
+    ultLectura = millis();
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES BOTONES--------------------------------------------------
+//Callbacks Pulsación Botones
+void botonOK_pulsado(GFButton& btn){
+  if(Estado == 3){
+    lcd.clear();
+    Tobjetivo = Tobj_prov;
+    Estado = 1;
+  }
+  else if (Estado == 4){
+    lcd.clear();
+    Hobjetivo = Hobj_prov;
+    Estado = 1;
+  }
+}
+
+void botonT1_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Tobj_prov = Tobjetivo;
+    Estado = 3;
+  }
+  else if(Estado == 3){
+    lcd.clear();
+    Tobj_prov++;
+  }
+}
+
+void botonT2_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Tobj_prov = Tobjetivo;
+    Estado = 3;
+  }
+  else if(Estado == 3){
+    lcd.clear();
+    Tobj_prov--;
+  }
+}
+
+void botonH1_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Hobj_prov = Hobjetivo;
+    Estado = 4;
+  }
+  else if(Estado == 4){
+    lcd.clear();
+    Hobj_prov++;
+  }
+}
+
+void botonH2_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Hobj_prov = Hobjetivo;
+    Estado = 4;
+  }
+  else if(Estado == 4){
+    lcd.clear();
+    Hobj_prov--;
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES PANTALLA LCD - I2C---------------------------------------
+bool AvisosConexSensores(){
+  if ((isnan(Tactual1) || isnan(Hactual1)) && (isnan(Tactual2) || isnan(Hactual2))) {
+    lcd.clear();
+    lcd.setCursor(6,0);
+    lcd.print("AVISO!!!");
+    lcd.setCursor(6,2);
+    lcd.print("SENSORES");
+    lcd.setCursor(3,3);
+    lcd.print("NO CONECTADOS");
+    return false;
+  }
+  else if (isnan(Tactual1) || isnan(Hactual1)) {
+    lcd.clear();
+    lcd.setCursor(6,0);
+    lcd.print("AVISO!!!");
+    lcd.setCursor(2,1);
+    lcd.print("SENSOR SUPERIOR");
+    lcd.setCursor(4,2);
+    lcd.print("NO CONECTADO");
+    return false;
+  } 
+  else if (isnan(Tactual2) || isnan(Hactual2)) {
+    lcd.clear();
+    lcd.setCursor(6,0);
+    lcd.print("AVISO!!!");
+    lcd.setCursor(2,2);
+    lcd.print("SENSOR INFERIOR");
+    lcd.setCursor(4,3);
+    lcd.print("NO CONECTADO");
+    return false;
+  }
+  else return true;
+}
+
+void MaquinaDeEstados(){
+  switch(Estado){
+    case 0:
+      lcd.setCursor(3,1);
+      lcd.print("BIENVENIDO !!!");
+      lcd.setCursor(5,2);
+      lcd.print("Espere ...");
+      if(millis()>5000) Estado = 1;
+      break;
+
+    case 1:
+      lcd.setCursor(0,0);
+      lcd.print("DATOS ACTUALES:");
+      lcd.setCursor(0,1);
+      lcd.print("T:");
+      lcd.print(Tactual);
+      lcd.print("   H:");
+      lcd.print(Hactual);
+      lcd.setCursor(0,2);
+      lcd.print("DATOS OBJETIVO:");
+      lcd.setCursor(0,3);
+      lcd.print("T:");
+      lcd.print(Tobjetivo);
+      lcd.print("   H:");
+      lcd.print(Hobjetivo);
+      if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+        lcd.clear();
+        Estado = 2;
+      }
+      break;
+
+    case 2:
+      lcd.setCursor(0,0);
+      lcd.print("DATOS SENSOR SUP:");
+      lcd.setCursor(0,1);
+      lcd.print("T:");
+      lcd.print(Tactual1);
+      lcd.print("   H:");
+      lcd.print(Hactual1);
+      lcd.setCursor(0,2);
+      lcd.print("DATOS SENSOR INF:");
+      lcd.setCursor(0,3);
+      lcd.print("T:");
+      lcd.print(Tactual2);
+      lcd.print("   H:");
+      lcd.print(Hactual2);
+      if((millis()%Cycle>Duty) && (millis()%Cycle<Cycle)){
+        Estado = 1;
+        lcd.clear();
+      }
+      break;
+
+    case 3:
+      lcd.setCursor(0,0);
+      lcd.print("NUEVA TEMP OBJETIVO");
+      lcd.setCursor(7,1);
+      lcd.print(Tobj_prov);
+      lcd.setCursor(4,3);
+      lcd.print("OK = ACEPTAR");
+      break;
+
+    case 4:
+      lcd.setCursor(0,0);
+      lcd.print("NUEVA HUM OBJETIVO");
+      lcd.setCursor(7,1);
+      lcd.print(Hobj_prov);
+      lcd.setCursor(4,3);
+      lcd.print("OK = ACEPTAR");
+      break;
+  }
+}
+
+void PantallaLCD(){
+  //Comprobación periódica de que los sensores funcionan
+  if(millis()-ultComprobacion > 100){
+    //Si los sensores funcionan, comienza el funcionamiento
+    if(AvisosConexSensores()) MaquinaDeEstados();
+    ultComprobacion = millis();
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Arrrrancando Motores !!!");
+
+  //Inicialización de Pines
+  //Pines Sensores
+  pinMode(SENSOR1, INPUT_PULLUP);
+  pinMode(SENSOR2, INPUT_PULLUP);
+  //Pines Botones
+  pinMode(PULSADOROK, INPUT_PULLUP);
+  pinMode(PULSADORT1, INPUT_PULLUP);
+  pinMode(PULSADORT2, INPUT_PULLUP);
+  pinMode(PULSADORH1, INPUT_PULLUP);
+  pinMode(PULSADORH2, INPUT_PULLUP);
+
+  //Inicialización sensores
+  dht1.begin();
+  dht2.begin();
+
+  //Inicialización pantalla
+  lcd.init();
+
+  //Asignación Funciones Callback 
+  botonOK.setPressHandler(botonOK_pulsado);
+  botonT1.setPressHandler(botonT1_pulsado);
+  botonT2.setPressHandler(botonT2_pulsado);
+  botonH1.setPressHandler(botonH1_pulsado);
+  botonH2.setPressHandler(botonH2_pulsado);
+}
+
+void loop() {
+  LecturaSensores();
+  PantallaLCD();
+
+  botonOK.process();
+  botonT1.process();
+  botonT2.process();
+  botonH1.process();
+  botonH2.process();
+}
