@@ -1,0 +1,632 @@
+//---BIBLIOTECAS NECESARIAS------------------------------------------------------------------------
+#include <SD.h>      //Biblioteca necesaria para Tarjeta SD
+#include <RTClib.h>  //Bibliotecas necesarias para Módulo RTC
+#include "DHT.h"                //Lectura sensores
+#include <LiquidCrystal_I2C.h>  //Pantalla LCD
+#include <Wire.h>               //Librería necesaria para pantalla LCD I2C
+#include "GFButton.h"           //Librería necesaria para evitar rebotes al pulsar los botones
+//-------------------------------------------------------------------------------------------------
+
+//---PUERTOS NECESARIOS----------------------------------------------------------------------------
+//Control Ventilación
+#define VENTILADOR1 4       //Ventilador cultivos
+#define VENTILADOR2 5       //Ventilador cultivos
+#define VENTILADOR3 6       //Ventilador suelo
+#define VENTILADOR4 7       //Ventilador suelo
+
+//Control Humidificadores
+#define HUMIDIFICADOR1 22   //Actuador humedad (parte superior armario)
+#define HUMIDIFICADOR2 23   //Actuador humedad (parte inferior armario)
+
+//Módulo de Refrigeración
+#define VENTILADOR5 28      //Relay control encendido ventiladores
+#define PELTIER1 29         //Relay control peltier modo frio
+#define PELTIER2 30         //Relay control peltier modo calor
+
+//Sensores
+#define SENSOR1 38          //Sensor parte superior armario
+#define SENSOR2 39          //Sensor parte inferior armario
+#define DHTTYPE DHT11       //MACRO TIPO SENSOR
+
+//Botones
+#define PULSADOROK 43       //Pulsador Aceptar
+#define PULSADORT1 44       //Pulsador Temperatura ++
+#define PULSADORT2 45       //Pulsador Temperatura --
+#define PULSADORH1 46       //Pulsador Humedad ++
+#define PULSADORH2 47       //Pulsador Humedad --
+
+//Lector Tarjeta SD
+#define CS 53               //X defecto es 4. Lo cambiamos x comodidad
+//-------------------------------------------------------------------------------------------------
+
+//---VARIABLES NECESARIAS--------------------------------------------------------------------------
+//Variables de temperatura y humedad
+volatile float Tactual1;
+volatile float Hactual1;
+volatile float Tactual2;
+volatile float Hactual2;
+volatile float Tactual;
+volatile float Hactual;
+volatile float Tobjetivo = 24;
+volatile float Hobjetivo = 80;
+volatile float Tobj_prov;
+volatile float Hobj_prov;
+
+//Variables para Actuadores
+float umbralTemp1 = 5;
+float umbralTemp2 = 4.5;
+float umbralHum1 = 5;
+float umbralHum2 = 2;
+float umbralHum3 = 3;
+bool bool_calef = false;
+bool bool_refrig = false;
+
+//Variables Control Ventiladores
+DateTime control;              //Hace uso del RTC
+int intervaloActivacion = 20;  //Tiene que ser < 60 min !!!
+bool ActTemp = false;
+bool ActHum = false;
+
+//Variables del ESP32
+unsigned long ultimoEnvioESP = 0;
+unsigned long intervaloEnvioESP = 10000;
+String inputString="";
+bool stringComplete=false;
+
+//Variable Módulo RTC
+RTC_DS1307 rtc;
+
+//Variables Pantalla LCD
+unsigned long ultComprobacion = 0;
+LiquidCrystal_I2C lcd(0x27, 20, 4);  //Dir. I2C, nº caracteres x fila, nº filas
+
+//Variables Maquina de Estados
+volatile int Estado = 0;
+unsigned long Cycle = 10000;
+unsigned long Duty = Cycle/2;
+
+//Variables del sensor
+DHT dht1(SENSOR1, DHTTYPE);
+DHT dht2(SENSOR2, DHTTYPE);
+unsigned long ultLectura = 0;
+
+//Variables Tipo Botón
+GFButton botonOK(PULSADOROK);
+GFButton botonT1(PULSADORT1);
+GFButton botonT2(PULSADORT2);
+GFButton botonH1(PULSADORH1);
+GFButton botonH2(PULSADORH2);
+
+//Variables para Tarjeta SD
+File myFile;
+DateTime now;                   //Hace uso del RTC
+unsigned long ultimoEnvioSD = 0;
+unsigned long intervaloEnvioSD = 60000;
+#define medidaSize 210          //NO CAMBIAR. Tamaño (caracteres) de escritura exacta de una medida
+#define maxBuffSize 100000      //Cambiar al tamaño que se quiera. Ahora almacena aprox 476 medidas
+//-------------------------------------------------------------------------------------------------
+
+
+//==============================FUNCIONES==========================================================
+//------------------------------FUNCIONES SENSORES-------------------------------------------------
+void LecturaSensores(){
+  if (millis() - ultLectura > 2000) {
+    Tactual1 = dht1.readTemperature();  //Temperatura [ºc] parte superior armario
+    Hactual1 = dht1.readHumidity();     //Humedad [%] parte superior armario
+
+    Tactual2 = dht2.readTemperature();  //Temperatura [ºc] parte inferior armario
+    Hactual2 = dht2.readHumidity();     //Humedad [%] parte inferior armario
+
+    Tactual = (Tactual1 + Tactual2) / 2;  //Temperatura promedio
+    Hactual = (Hactual1 + Hactual2) / 2;  //Humedad promedio
+
+    ultLectura = millis();
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES TARJETA SD-----------------------------------------------
+//Función para almacenar fecha y hora en un string
+String obtenerFechaHora(DateTime t) {
+  String fechaHora = "";
+  fechaHora += t.day();
+  fechaHora += '/';
+  fechaHora += t.month();
+  fechaHora += '/';
+  fechaHora += t.year();
+  fechaHora += " - ";
+  fechaHora += t.hour();
+  fechaHora += ':';
+  if (t.minute() < 10) fechaHora += '0';  // Añadir un 0 si el minuto es menor a 10
+  fechaHora += t.minute();
+  fechaHora += ':';
+  if (t.second() < 10) fechaHora += '0';  // Añadir un 0 si el segundo es menor a 10
+  fechaHora += t.second();
+  return fechaHora;
+}
+
+//Función para almacenar lectura de los sensores en un string
+String obtenerDatosSensoresSD(){
+  String datos = "";
+  datos += "Datos sensor arriba:  TEMPERATURA - ";
+  if (Tactual1<10) datos+='0';
+  datos += String(Tactual1,2);
+  datos += "ºC   HUMEDAD - ";
+  if (Hactual1<10) datos+='0';
+  datos += String(Hactual1,2);
+  datos += "%\n";
+  datos += "Datos sensor abajo:  TEMPERATURA - ";
+  if (Tactual2<10) datos+='0';
+  datos += String(Tactual2, 2);
+  datos += "ºC   HUMEDAD - ";
+  if (Hactual2<10) datos+='0';
+  datos += String(Hactual2, 2);
+  datos += "%\n";
+  datos += "Datos armario:  TEMPERATURA - ";
+  if (Tactual<10) datos+='0';
+  datos += String(Tactual, 2);
+  datos += "ºC   HUMEDAD - ";
+  if (Hactual<10) datos+='0';
+  datos += String(Hactual, 2);
+  datos += "%\n";
+  return datos;
+}
+
+//Función para borrar primera medida de la tarjeta SD si no cabe 
+void recortarArchivo(const char* nombreArchivo){  //para pasarle el archivo original
+  //LECTURA CONTENIDO FICHERO A PARTIR DE LA 2ª MEDIDA
+  File archivo=SD.open(nombreArchivo, FILE_READ);
+  if(!archivo){
+    Serial.print("Error al abrir el archivo para recortar");
+    return;
+  }
+  archivo.seek(medidaSize);  //Desplazar cursor al ppo de 2ª medida
+  String newArchivo="";      //Variable almacenamiento fichero desde ppo 2ª medida
+  while(archivo.available()) newArchivo+=(char)archivo.read(); //Almacenar contenido fichero
+  archivo.close();
+
+  //ESCRITURA CONTENIDO FICHERO A PARTIR DE LA 2ª MEDIDA
+  SD.remove(nombreArchivo);  //Borramos el contenido del fichero para no sobreescribir erroneamente
+  archivo=SD.open(nombreArchivo, FILE_WRITE);
+  archivo.print(newArchivo); //Sobreescribimos el contenido del fichero
+  archivo.close();
+
+  Serial.println("Archivo recortado exitosamente");
+}
+
+void EnvioTarjetaSD(){
+  if((millis()- ultimoEnvioSD)>intervaloEnvioSD){
+    now = rtc.now();
+    myFile = SD.open("archivo.txt", FILE_WRITE); //Abrir archivo de toma de datos en modo escritura
+    if (myFile) {
+      Serial.println("Escribiendo datos sensores en SD");  //Mientras haya espacio en la tarjeta SD
+      myFile.println(obtenerFechaHora(now));
+      myFile.println(obtenerDatosSensoresSD());
+      Serial.println(obtenerFechaHora(now));
+      Serial.println(obtenerDatosSensoresSD());
+      ultimoEnvioSD = millis();
+      myFile.close();
+
+      //Comprobamos tamaño del archivo y recortamos si necesario
+      if (SD.open("archivo.txt").size() > maxBuffSize) recortarArchivo("archivo.txt");
+    }
+    else Serial.println("Error al escribir datos de los sensores en la tarjeta SD");
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES ESP32----------------------------------------------------
+//Función para almacenar lectura de los sensores en un string
+String obtenerDatosSensoresESP(){
+  String datos="";
+  datos+=Tactual1;
+  datos+='_';
+  datos+=Hactual1;
+  datos+='_';
+  datos+=Tactual2;
+  datos+='_';
+  datos+=Hactual2;
+  datos+='_';
+  datos+=Tactual;
+  datos+='_';
+  datos+=Hactual;
+  datos+='_';
+  datos+=Tobjetivo;
+  datos+='_';
+  datos+=Hobjetivo;
+  datos+='-';
+  return datos;
+}
+
+//Función para avisar que se reciben datos por el Serial1
+void serialEvent() {
+  while (Serial1.available()) {          //.available()=true si hay datos en el buffer de recepción
+    char inChar = (char)Serial1.read();  //lee el primer caracter en el buffer y lo guarda en char
+    inputString += inChar;               //almacena cada caracter en un string
+    if (inChar == '-') stringComplete = true;  //'-' = char que indica fin de cadena en el buffer
+  }   //se pasa al siguiente elemento del buffer y se vuelve a evaluar el while
+}
+
+void EnvioDatosESP(){
+  if ((millis() - ultimoEnvioESP) > intervaloEnvioESP) {
+    Serial.println(obtenerDatosSensoresESP());
+    Serial1.println(obtenerDatosSensoresESP());
+    ultimoEnvioESP = millis();
+  }
+}
+
+void LecturaDatosESP() {
+  serialEvent();
+  if (stringComplete) {
+    Serial.print("Datos recibidos del ESP:");
+    Serial.println(inputString);
+
+    int pos1 = inputString.indexOf('_');
+    Tobjetivo = inputString.substring(0, pos1).toFloat();
+    Serial.print("Temperatura Objetivo:");
+    Serial.print(Tobjetivo);
+    Serial.println(" ºC");
+
+    Hobjetivo = inputString.substring(pos1 + 1, (inputString.length() - 1)).toFloat();
+    Serial.print("Humedad Objetivo:");
+    Serial.print(Hobjetivo);
+    Serial.println(" ºC");
+
+    inputString = "";
+    stringComplete = false;
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES BOTONES--------------------------------------------------
+//Callbacks Pulsación Botones
+void botonOK_pulsado(GFButton& btn){
+  if(Estado == 3){
+    lcd.clear();
+    Tobjetivo = Tobj_prov;
+    Estado = 1;
+  }
+  else if (Estado == 4){
+    lcd.clear();
+    Hobjetivo = Hobj_prov;
+    Estado = 1;
+  }
+}
+
+void botonT1_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Tobj_prov = Tobjetivo;
+    Estado = 3;
+  }
+  else if(Estado == 3){
+    lcd.clear();
+    Tobj_prov++;
+  }
+}
+
+void botonT2_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Tobj_prov = Tobjetivo;
+    Estado = 3;
+  }
+  else if(Estado == 3){
+    lcd.clear();
+    Tobj_prov--;
+  }
+}
+
+void botonH1_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Hobj_prov = Hobjetivo;
+    Estado = 4;
+  }
+  else if(Estado == 4){
+    lcd.clear();
+    Hobj_prov++;
+  }
+}
+
+void botonH2_pulsado(GFButton& btn){
+  if(Estado == 1 || Estado == 2){
+    lcd.clear();
+    Hobj_prov = Hobjetivo;
+    Estado = 4;
+  }
+  else if(Estado == 4){
+    lcd.clear();
+    Hobj_prov--;
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES PANTALLA LCD - I2C---------------------------------------
+bool AvisosConexSensores(){
+  if ((isnan(Tactual1) || isnan(Hactual1)) && (isnan(Tactual2) || isnan(Hactual2))) {
+    lcd.clear();
+    lcd.setCursor(6,0);
+    lcd.print("AVISO!!!");
+    lcd.setCursor(6,2);
+    lcd.print("SENSORES");
+    lcd.setCursor(3,3);
+    lcd.print("NO CONECTADOS");
+    return false;
+  }
+  else if (isnan(Tactual1) || isnan(Hactual1)) {
+    lcd.clear();
+    lcd.setCursor(6,0);
+    lcd.print("AVISO!!!");
+    lcd.setCursor(2,1);
+    lcd.print("SENSOR SUPERIOR");
+    lcd.setCursor(4,2);
+    lcd.print("NO CONECTADO");
+    return false;
+  } 
+  else if (isnan(Tactual2) || isnan(Hactual2)) {
+    lcd.clear();
+    lcd.setCursor(6,0);
+    lcd.print("AVISO!!!");
+    lcd.setCursor(2,2);
+    lcd.print("SENSOR INFERIOR");
+    lcd.setCursor(4,3);
+    lcd.print("NO CONECTADO");
+    return false;
+  }
+  else return true;
+}
+
+void MaquinaDeEstados(){
+  switch(Estado){
+    case 0:
+      lcd.setCursor(3,1);
+      lcd.print("BIENVENIDO !!!");
+      lcd.setCursor(5,2);
+      lcd.print("Espere ...");
+      if(millis()>5000) Estado = 1;
+      break;
+
+    case 1:
+      lcd.setCursor(0,0);
+      lcd.print("DATOS ACTUALES:");
+      lcd.setCursor(0,1);
+      lcd.print("T:");
+      lcd.print(Tactual);
+      lcd.print("   H:");
+      lcd.print(Hactual);
+      lcd.setCursor(0,2);
+      lcd.print("DATOS OBJETIVO:");
+      lcd.setCursor(0,3);
+      lcd.print("T:");
+      lcd.print(Tobjetivo);
+      lcd.print("   H:");
+      lcd.print(Hobjetivo);
+      if((millis()%Cycle>0) && (millis()%Cycle<Duty)){
+        lcd.clear();
+        Estado = 2;
+      }
+      break;
+
+    case 2:
+      lcd.setCursor(0,0);
+      lcd.print("DATOS SENSOR SUP:");
+      lcd.setCursor(0,1);
+      lcd.print("T:");
+      lcd.print(Tactual1);
+      lcd.print("   H:");
+      lcd.print(Hactual1);
+      lcd.setCursor(0,2);
+      lcd.print("DATOS SENSOR INF:");
+      lcd.setCursor(0,3);
+      lcd.print("T:");
+      lcd.print(Tactual2);
+      lcd.print("   H:");
+      lcd.print(Hactual2);
+      if((millis()%Cycle>Duty) && (millis()%Cycle<Cycle)){
+        Estado = 1;
+        lcd.clear();
+      }
+      break;
+
+    case 3:
+      lcd.setCursor(0,0);
+      lcd.print("NUEVA TEMP OBJETIVO");
+      lcd.setCursor(7,1);
+      lcd.print(Tobj_prov);
+      lcd.setCursor(4,3);
+      lcd.print("OK = ACEPTAR");
+      break;
+
+    case 4:
+      lcd.setCursor(0,0);
+      lcd.print("NUEVA HUM OBJETIVO");
+      lcd.setCursor(7,1);
+      lcd.print(Hobj_prov);
+      lcd.setCursor(4,3);
+      lcd.print("OK = ACEPTAR");
+      break;
+  }
+}
+
+void PantallaLCD(){
+  //Comprobación periódica de que los sensores funcionan
+  if(millis()-ultComprobacion > 100){
+    //Si los sensores funcionan, comienza el funcionamiento
+    if(AvisosConexSensores()) MaquinaDeEstados();
+    ultComprobacion = millis();
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+//------------------------------FUNCIONES ACTUADORES-----------------------------------------------
+bool ControlPorTiempo(){
+  control = rtc.now();
+  if (control.minute()>0 && control.minute()<intervaloActivacion) return true;
+  return false;
+}
+
+void ActuadorVentilacion() {
+  //DETECCIÓN DE ACTUADORES
+  if(ActTemp || ActHum){
+    analogWrite(VENTILADOR1,255);
+    analogWrite(VENTILADOR2,255);
+    analogWrite(VENTILADOR3,255);
+    analogWrite(VENTILADOR4,255);
+  }
+  //INTERVALOS DE VENTILACIÓN
+  else if(ControlPorTiempo()){
+    analogWrite(VENTILADOR1,100);
+    analogWrite(VENTILADOR2,100);
+    analogWrite(VENTILADOR3,100);
+    analogWrite(VENTILADOR4,100);
+  }
+  //DESACTIVACIÓN FORZADA
+  else if(!ActTemp && !ActHum && !ControlPorTiempo()){
+    analogWrite(VENTILADOR1,0);
+    analogWrite(VENTILADOR2,0);
+    analogWrite(VENTILADOR3,0);
+    analogWrite(VENTILADOR4,0);
+  }
+}
+
+void ActuadorHumedad(){
+  //Control Humidificador Superior
+  if ((Hactual1 < (Hobjetivo - umbralHum1)) || (Hactual < (Hobjetivo - umbralHum3)))
+    digitalWrite(HUMIDIFICADOR1, HIGH);
+  else if ((Hactual1 > (Hobjetivo + umbralHum1)) && (Hactual > (Hobjetivo + umbralHum2)))
+    digitalWrite(HUMIDIFICADOR1, LOW);
+
+  //Control Humidificador Inferior
+  if ((Hactual2 < (Hobjetivo - umbralHum1)) || (Hactual < (Hobjetivo - umbralHum3)))
+    digitalWrite(HUMIDIFICADOR2, HIGH);
+  else if ((Hactual2 > (Hobjetivo + umbralHum1)) && (Hactual > (Hobjetivo + umbralHum2)))
+    digitalWrite(HUMIDIFICADOR2, LOW);
+}
+
+void modo_refrigeracion(){
+  digitalWrite(PELTIER1, LOW);
+  digitalWrite(PELTIER2, HIGH);
+  digitalWrite(VENTILADOR5, HIGH);
+}
+
+void modo_calefaccion(){
+  digitalWrite(PELTIER2, LOW);     //aseguramos apagado control modo calor
+  digitalWrite(PELTIER1, HIGH);    //encendemos control modo frio
+  digitalWrite(VENTILADOR5, HIGH); //modo frio o calor, ventiladores activados
+}
+
+void modo_desactivado(){
+  digitalWrite(PELTIER1, LOW);
+  digitalWrite(PELTIER2, LOW);
+  digitalWrite(VENTILADOR5, LOW);
+}
+
+void ActuadorTemperatura(){
+  if(Tactual < (Tobjetivo - umbralTemp1) && !bool_refrig){
+    modo_refrigeracion();
+    bool_calef = true;
+  }
+  else if(Tactual > (Tobjetivo + umbralTemp1) && !bool_calef){
+    modo_calefaccion();
+    bool_refrig = true;
+  }
+  else if(bool_calef && Tactual > (Tobjetivo + umbralTemp2)){
+    modo_desactivado();
+    bool_calef = false;
+  }
+  else if(bool_refrig && Tactual < (Tobjetivo - umbralTemp2)){
+    modo_desactivado();
+    bool_refrig = false;
+  }
+}
+//-------------------------------------------------------------------------------------------------
+
+
+void setup(){
+  //Inicialización
+  Serial.begin(115200);
+  Serial1.begin(115200);
+  Serial.println("Arrrrancando Motores !!!");
+
+
+  //INICIALIZACION DE PINES
+  //Control Ventilacion
+  pinMode(VENTILADOR1, OUTPUT);
+  pinMode(VENTILADOR2, OUTPUT);
+  pinMode(VENTILADOR3, OUTPUT);
+  pinMode(VENTILADOR4, OUTPUT);
+  //Control Humidificadores
+  pinMode(HUMIDIFICADOR1, OUTPUT);
+  pinMode(HUMIDIFICADOR2, OUTPUT);
+  //Control Módulo Refrigeración  
+  pinMode(VENTILADOR5, OUTPUT);
+  pinMode(PELTIER1, OUTPUT);
+  pinMode(PELTIER2,OUTPUT);
+  //Pines Sensores
+  pinMode(SENSOR1, INPUT_PULLUP);
+  pinMode(SENSOR2, INPUT_PULLUP);
+  //Pines Botones
+  pinMode(PULSADOROK, INPUT_PULLUP);
+  pinMode(PULSADORT1, INPUT_PULLUP);
+  pinMode(PULSADORT2, INPUT_PULLUP);
+  pinMode(PULSADORH1, INPUT_PULLUP);
+  pinMode(PULSADORH2, INPUT_PULLUP);
+
+  //Inicialización Tarjeta SD
+  Serial.println("Iniciando SD");
+  if (!SD.begin(CS)) {  //Comprueba que esté conectado el CSPIN
+    Serial.println("No se pudo inicializar la tarjeta SD");
+    return;
+  }
+  else Serial.println("Inicializacion tarjeta SD exitosa ");
+
+  //Inicialización Módulo RTC
+  if (!rtc.begin()) {
+    Serial.println("No se puede encontrar RTC");
+    while (1); //es necesario que conecte
+  }
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Ajusta el RTC con la hora de compilación
+  now = rtc.now();
+  Serial.println(obtenerFechaHora(now));
+
+  //Inicialización Conexión ESP32
+  if (!Serial1.available()) {
+    Serial.println("No se pudo conectar con el ESP32");
+    return;
+  }
+  else Serial.println("Conexion con ESP32 exitosa");
+
+  //Inicialización sensores
+  dht1.begin();
+  dht2.begin();
+
+  //Inicialización pantalla
+  lcd.init();
+
+  //Asignación Funciones Callback 
+  botonOK.setPressHandler(botonOK_pulsado);
+  botonT1.setPressHandler(botonT1_pulsado);
+  botonT2.setPressHandler(botonT2_pulsado);
+  botonH1.setPressHandler(botonH1_pulsado);
+  botonH2.setPressHandler(botonH2_pulsado);
+
+  //Nos aseguramos que empezamos con el modo de calefaccion desactivado
+  modo_desactivado();
+}
+
+void loop(){
+  LecturaSensores();
+  EnvioTarjetaSD();
+  EnvioDatosESP();
+  LecturaDatosESP();
+  ActuadorVentilacion();
+  ActuadorHumedad();
+  ActuadorTemperatura();
+  PantallaLCD();
+  botonOK.process();
+  botonT1.process();
+  botonT2.process();
+  botonH1.process();
+  botonH2.process();
+}
