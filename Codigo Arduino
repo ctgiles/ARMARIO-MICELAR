@@ -101,9 +101,9 @@ GFButton botonH2(PULSADORH2);
 File myFile;
 DateTime now;                   //Hace uso del RTC
 unsigned long ultimoEnvioSD = 0;
-unsigned long intervaloEnvioSD = 60000;
+unsigned long intervaloEnvioSD = 21600000;
 #define medidaSize 210          //NO CAMBIAR. Tamaño (caracteres) de escritura exacta de una medida
-#define maxBuffSize 100000      //Cambiar al tamaño que se quiera. Ahora almacena aprox 476 medidas
+#define maxBuffSize 1000000
 //-------------------------------------------------------------------------------------------------
 
 
