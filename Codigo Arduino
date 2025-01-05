@@ -492,34 +492,44 @@ void ActuadorVentilacion() {
 
 void ActuadorHumedad(){
   //Control Humidificador Superior
-  if ((Hactual1 < (Hobjetivo - umbralHum1)) || (Hactual < (Hobjetivo - umbralHum3)))
+  if ((Hactual1 < (Hobjetivo - umbralHum1)) || (Hactual < (Hobjetivo - umbralHum3))){
     digitalWrite(HUMIDIFICADOR1, HIGH);
-  else if ((Hactual1 > (Hobjetivo + umbralHum1)) && (Hactual > (Hobjetivo + umbralHum2)))
+    ActHum = true;
+  }
+  else if ((Hactual1 > (Hobjetivo + umbralHum1)) && (Hactual > (Hobjetivo + umbralHum2))){
     digitalWrite(HUMIDIFICADOR1, LOW);
-
+    ActHum = false;
+  }
   //Control Humidificador Inferior
-  if ((Hactual2 < (Hobjetivo - umbralHum1)) || (Hactual < (Hobjetivo - umbralHum3)))
+  if ((Hactual2 < (Hobjetivo - umbralHum1)) || (Hactual < (Hobjetivo - umbralHum3))){
     digitalWrite(HUMIDIFICADOR2, HIGH);
-  else if ((Hactual2 > (Hobjetivo + umbralHum1)) && (Hactual > (Hobjetivo + umbralHum2)))
+    ActHum = true;
+  }
+  else if ((Hactual2 > (Hobjetivo + umbralHum1)) && (Hactual > (Hobjetivo + umbralHum2))){
     digitalWrite(HUMIDIFICADOR2, LOW);
+    ActHum = false;
+  }
 }
 
 void modo_refrigeracion(){
   digitalWrite(PELTIER1, LOW);
   digitalWrite(PELTIER2, HIGH);
   digitalWrite(VENTILADOR5, HIGH);
+  ActTemp = true;
 }
 
 void modo_calefaccion(){
-  digitalWrite(PELTIER2, LOW);     //aseguramos apagado control modo calor
-  digitalWrite(PELTIER1, HIGH);    //encendemos control modo frio
-  digitalWrite(VENTILADOR5, HIGH); //modo frio o calor, ventiladores activados
+  digitalWrite(PELTIER2, LOW);
+  digitalWrite(PELTIER1, HIGH);
+  digitalWrite(VENTILADOR5, HIGH);
+  ActTemp = true;
 }
 
 void modo_desactivado(){
   digitalWrite(PELTIER1, LOW);
   digitalWrite(PELTIER2, LOW);
   digitalWrite(VENTILADOR5, LOW);
+  ActTemp = false;
 }
 
 void ActuadorTemperatura(){
